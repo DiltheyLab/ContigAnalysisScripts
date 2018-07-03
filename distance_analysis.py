@@ -1,6 +1,10 @@
 from argparse import ArgumentParser
 from operator import itemgetter
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 import sys
+from itertools import combinations
 
 
 parser = ArgumentParser()
@@ -54,6 +58,8 @@ for rid in greadst:
 #print(greads)
 
 distances = {}
+# get distances of all neighbouring overlaps
+'''
 for rid in greads:
     oviter = iter(greads[rid]["overlaps"])
     #print(ov)
@@ -73,14 +79,9 @@ for rid in greads:
         #print("distance between " + ovold["contig"] + " and " + ovnew["contig"] + ": " + str(ovnew["scr"] - ovold["ecr"]- ovold["lc"] + ovold["ecc"] - ovnew["scc"]))
         if ovnew["contig"] == ovold["contig"]:
             continue
-        if ovnew["strand"] == 0 and ovold["strand"] == 0:
-            #cstring = ovold["contig"] + "_" + ovnew["contig"]
-            distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
-        elif ovnew["strand"] == 1 and ovold["strand"] == 1:
-            #cstring = ovnew["contig"] + "_"  + ovold["contig"]
+        if ovnew["strand"] == ovold["strand"]:
             distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
         else:
-            #print(str(ovold)+ " " + str(ovnew))
             continue
         if int(ovold["contig"].rstrip("QBL")) < int(ovnew["contig"].rstrip("QBL")):
             cstring = ovold["contig"] + "_" + ovnew["contig"]
@@ -92,12 +93,40 @@ for rid in greads:
         else:
             distances[cstring] = [distance]
         ovold = ovnew
+'''
+
+# get distances of all overlaps
+for rid in greads:
+    for combo in combinations(greads[rid]['overlaps'], 2):
+        ovnew = combo[1]
+        ovold = combo[0]
+        if ovnew["contig"].startswith("chr") or ovold["contig"].startswith("chr"):
+            continue
+        if ovnew["contig"] == ovold["contig"]:
+            continue
+        if ovnew["strand"] == ovold["strand"]:
+            distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
+        else:
+            continue
+        if abs(distance) > 1000:
+            continue
+        if int(ovold["contig"].rstrip("QBL")) < int(ovnew["contig"].rstrip("QBL")):
+            cstring = ovold["contig"] + "_" + ovnew["contig"]
+        else:
+            cstring = ovnew["contig"] + "_" + ovold["contig"]
+        if cstring in distances:
+            distances[cstring].append(distance)
+        else:
+            distances[cstring] = [distance]
+        #print(combo)
+    
 
         
 for key, value in distances.items():
     #print(str(key) + " " + str(value)) 
     if len(value)>1:
-        print(str(key) + "\t" + str(value)) 
+        #print(str(key) + "\t" + str(value)) 
+        pass
 
 distances2 = {}
 
@@ -119,8 +148,20 @@ with open(args.summaryfile) as f:
         else:    
             distances2[cstr] = moddist
             
-for pair in distances2:
-    if pair in distances:
-        npdists = distances[pair]
-        #print(pair + "\t" + str(sum(npdists)/float(len(npdists))) + "\t" + str(distances2[pair]))
         
+df = pd.DataFrame.from_dict([distances, distances2])
+#df.rename(index=
+dc = df.T.rename(columns={0:'longread',1:'shortread'})
+dc.longread = dc.longread.apply(np.mean)
+
+#dc['longread']  = np.mean(dc.longread)
+dd = dc.dropna()
+
+#get interesting differences
+print(dd[abs(dd['longread'] - dd['shortread']) > 150])
+
+
+plt.scatter(dd['longread'], dd['shortread'],s= 6, alpha = 0.3)
+plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread'])) + ")")
+plt.ylabel("Short Read Distances (mean: " + "{:.3f}".format(np.mean(dd['shortread'])) + ")")
+plt.savefig('distances_scatter.pdf')
