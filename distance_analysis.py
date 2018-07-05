@@ -108,8 +108,8 @@ for rid in greads:
             distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
         else:
             continue
-        if abs(distance) > 1000:
-            continue
+        #if abs(distance) > 2000:
+        #    continue
         if int(ovold["contig"].rstrip("QBL")) < int(ovnew["contig"].rstrip("QBL")):
             cstring = ovold["contig"] + "_" + ovnew["contig"]
         else:
@@ -137,6 +137,8 @@ with open(args.summaryfile) as f:
         ctg2 = sline[0].split("_")[1].strip("+").strip("-")
         if sline[1] == "NA":
             continue
+        if float(sline[4]) > 2:
+            continue
         moddist = float(sline[1])
         if int(ctg1.rstrip("QBL")) < int(ctg2.rstrip("QBL")):
             cstr = ctg1+"_"+ctg2
@@ -152,16 +154,16 @@ with open(args.summaryfile) as f:
 df = pd.DataFrame.from_dict([distances, distances2])
 #df.rename(index=
 dc = df.T.rename(columns={0:'longread',1:'shortread'})
-dc.longread = dc.longread.apply(np.mean)
+dc["longread_mean"] = dc.longread.apply(np.mean)
 
 #dc['longread']  = np.mean(dc.longread)
 dd = dc.dropna()
 
 #get interesting differences
-print(dd[abs(dd['longread'] - dd['shortread']) > 150])
+print(dd[abs(dd['longread_mean'] - dd['shortread']) > 150])
 
 
-plt.scatter(dd['longread'], dd['shortread'],s= 6, alpha = 0.3)
-plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread'])) + ")")
+plt.scatter(dd['longread_mean'], dd['shortread'],s= 6, alpha = 0.3)
+plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread_mean'])) + ")")
 plt.ylabel("Short Read Distances (mean: " + "{:.3f}".format(np.mean(dd['shortread'])) + ")")
 plt.savefig('distances_scatter.pdf')
