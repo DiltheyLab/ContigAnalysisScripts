@@ -12,6 +12,8 @@ parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
+#parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
+parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
 
 args = parser.parse_args()
 
@@ -77,7 +79,6 @@ while len(greads) > 0:
     # take a random read and build a cluster from it
     cr = greads.popitem()
     current_cluster[cr[0]] = cr[1]
-    #print(len(current_cluster))
     olen = 0
     while len(current_cluster) != olen:
         olen = len(current_cluster)
@@ -86,41 +87,46 @@ while len(greads) > 0:
                 contigs.pop(contig["contig"], None)
                 current_contigs.add(contig["contig"])
                 contig2cluster[contig["contig"]] = clusternr
-        #print("contigs: " + str(current_contigs))
         for readid,readval in greads.items():
             contig_found = False
             for contig in readval["overlaps"]:
-                if contig["contig"] in current_contigs:
-                    contig_found = True
-                    current_cluster[readid] = readval
-                    cr = (readid, greads.pop(readid))
-                    break
+                if not contig["contig"].startswith("chr"):
+                    if contig["contig"] in current_contigs:
+                        contig_found = True
+                        current_cluster[readid] = readval
+                        cr = (readid, greads.pop(readid))
+                        break
                    
             if contig_found:
                 break
-    #print("cluster length: " + str(len(current_cluster)))
     creads[clusternr] = current_cluster
-print("Nr. of scaffolds: " + str(clusternr+len(contigs)) + " (" + str(clusternr) + " clustered + " + str(len(contigs))+ " unclustered)")
-#print(len(contig2cluster))
-#print(contig2cluster)
+print("Nr. of scaffolds: " + str(clusternr+len(contigs)) + " (" + str(clusternr) + " cluster + " + str(len(contigs))+ " contigs)")
 
-#def lneighbour(contig):
-#    print(creads[contig2cluster[contig]])
-
-#lneighbour("2053QBL")
 scaffolds={}
 for i, cluster in creads.items():
     current_contigs = set([])
     for readid,read in cluster.items():
-        print(read)
+        #print(read)
         for contig in read["overlaps"]:
-            current_contigs.add(contig["contig"])
+            if not contig["contig"].startswith("chr"):
+                current_contigs.add(contig["contig"])
     scaffolds[i] = current_contigs
+#print(scaffolds)
 
-print(scaffolds)
+#print(scaffolds
+def addcontig(ctg, cluster):
+    contig2cluster[ctg] = cluster
+    scaffolds[cluster].add(ctg)
+    contigs.pop(ctg, None)
+    
+def mergecluster(cluster1, cluster2):
+    for contig in scaffolds[cluster2]:
+        contig2cluster[contig] = cluster1
+        scaffolds[cluster1].add(contig)
+    scaffolds.pop(cluster2)
 
-
-sdistances = {}
+# very lenient clustering of short reads
+print("scaffolding short reads ....")
 with open(args.summaryfile) as f:
     for line in f:
         sline = line.split()
@@ -128,41 +134,29 @@ with open(args.summaryfile) as f:
         ctg2 = sline[0].split("_")[1].strip("+").strip("-")
         if sline[1] == "NA":
             continue
-        moddist = float(sline[1])
-        if int(ctg1.rstrip("QBL")) < int(ctg2.rstrip("QBL")):
-            cstr = ctg1+"_"+ctg2
+        if int(sline[2]) < args.mindepth:
+            continue
+        #moddist = float(sline[1])
+        if ctg1 in contig2cluster:
+            if ctg2 in contig2cluster:
+                if contig2cluster[ctg1] != contig2cluster[ctg2]:
+                    #print("merging clusters " + str(contig2cluster[ctg1]) + " and " + str(contig2cluster[ctg2]))
+                    mergecluster(contig2cluster[ctg1], contig2cluster[ctg2])
+            else:
+                addcontig(ctg2, contig2cluster[ctg1])
+            #print("cluster of ctg1 (" + ctg1 + "): " + str(contig2cluster[ctg1]))
+        elif ctg2 in contig2cluster:
+            addcontig(ctg1, contig2cluster[ctg2])
         else:
-            cstr = ctg2+"_"+ctg1
-        if cstr in sdistances:
-            if abs(moddist) < abs(sdistances[cstr]):
-                sdistances[cstr] = moddist
-        else:    
-            sdistances[cstr] = moddist
+            clusternr += 1
+            #print("new cluster: " + str(clusternr))
+            scaffolds[clusternr] = set([ctg1, ctg2])
+            contig2cluster[ctg1] = clusternr
+            contig2cluster[ctg2] = clusternr
+            contigs.pop(ctg1, None)
+            contigs.pop(ctg2, None)
             
-        
-df = pd.DataFrame.from_dict([ldistances, sdistances])
-#df.rename(index=
-dc = df.T.rename(columns={0:'longread',1:'shortread'})
-dc.longread = dc.longread.apply(np.mean)
-dd = dc.dropna()
-print(dd)
-
-#de = dd[dd['longread']-dd['shortread']) < 30]
-
-
-#get interesting differences
-#print(dd[abs(dd['longread'] - dd['shortread']) > 150])
-
-
-plt.scatter(dd['longread'], dd['shortread'],s= 6, alpha = 0.3)
-plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread'])) + ")")
-plt.ylabel("Short Read Distances (mean: " + "{:.3f}".format(np.mean(dd['shortread'])) + ")")
-
-#plot line to show which values are taken
-x = np.arange(-1000,1000,0.1)
-y1 = x+30
-y2 = x-30
-plt.plot(x,y1)
-plt.plot(x,y2)
-
-plt.savefig('distances_scatter.pdf')
+            
+print("Nr. of scaffolds: " + str(len(scaffolds)+len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
+print(contigs)
+#print(scaffolds)
