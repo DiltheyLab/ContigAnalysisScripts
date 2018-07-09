@@ -102,6 +102,7 @@ while len(greads) > 0:
     creads[clusternr] = current_cluster
 print("Nr. of scaffolds: " + str(clusternr+len(contigs)) + " (" + str(clusternr) + " cluster + " + str(len(contigs))+ " contigs)")
 
+# simpler data structure to collect contigs into scaffolds
 scaffolds={}
 for i, cluster in creads.items():
     current_contigs = set([])
@@ -113,7 +114,6 @@ for i, cluster in creads.items():
     scaffolds[i] = current_contigs
 #print(scaffolds)
 
-#print(scaffolds
 def addcontig(ctg, cluster):
     contig2cluster[ctg] = cluster
     scaffolds[cluster].add(ctg)
@@ -158,5 +158,18 @@ with open(args.summaryfile) as f:
             
             
 print("Nr. of scaffolds: " + str(len(scaffolds)+len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
-print(contigs)
-#print(scaffolds)
+#print(contigs)
+for scaf in scaffolds:
+    print(scaffolds[scaf])
+    sys.exit(0)
+def get_rightmost_contig(scaf_id):
+    print(creads[scaf_id])
+    if len(creads[scaf_id]) > 1:
+        print("not implemented yet")
+    else:
+        rid, read = creads[scaf_id].items()
+        for ov in read["overlaps"]:
+            print(ov)
+
+#get_rightmost_contig(1)
+#sys.exit(0)
