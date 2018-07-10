@@ -19,8 +19,8 @@ args = parser.parse_args()
 
 reads = {}
 greads = {}
-cgreads = []
 contigs = {}
+contig2scaffold = {}
 
 
 for read in SeqIO.parse(args.contigfile, "fasta"):
@@ -31,10 +31,14 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 class Scaffold:
     sr_info = dict()
     lr_info = dict()
-    contigs = dict()
+    coords = []
+    left_coords = dict()
+    right_coords = dict()
+    orientation = dict()
     contigset = set()
     sequence = ""
     nr_of_scaffolds = 0
+    turned_around = False
     #id = 
     # All contigs will have scaffold coordinates.
     # Before scaffolds are merged all scaffold coordinates 
@@ -43,19 +47,29 @@ class Scaffold:
     
     def __init__(self):
         Scaffold.nr_of_scaffolds += 1
+        self.contigset = set()
+        #self.turned_around = False
         #lr_info[lr[0]] = lr[1]
 
     def add_sr_info(self, sr):
         pass
     
     def add_lr_info(self, lr):
-        self.lr_info[lr[0]] = lr[1]
-        for part in lr[1]["maps"]:
-            if part["contig"].startswith("QBL"):
-                contigset.add(part["contig"])
+        pass
 
-    def print_contigset():
+    def print_contigset(self):
+        sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip("QBL")))
+        for contig in sortedcontigs:
+            print(contig)
         
+    def print_coords(self):
+        coordstr = ""
+        for pos in self.coords:
+            if pos == ("",""):
+                coordstr += "."
+            else:
+                coordstr += "|"
+        print(coordstr)
 
 
     def del_lr_info(self, lrid):
@@ -66,11 +80,89 @@ class Scaffold:
 
     def del_sr_info(self, srid):
         pass
+
+    # this signifies a hard turnaround
+    # i.e. the coordinate system of the scaffold is reversed
+    def turn_around(self):
+        #self.turned_around = not self.turned_around
+        print("Turned " + str(id(self)) + " around.")
+        new_left_coords = {}
+        new_right_coords = {}
+        new_orientation = {}
+        for contig in self.contigset:
+            new_right_coords[contig] = self.length - self.left_coords[contig] 
+            new_left_coords[contig] = self.length - self.right_coords[contig] 
+            new_orientation[contig] = 0 if self.orientation[contig] == 1 else 1
+        self.left_coords = new_left_coords
+        self.right_coords = new_right_coords
+        self.orientation = new_orientation
+
+    def is_left_of(self,ctg1, ctg2):
+        if self.left_coords(ctg1) < self.left_coords(ctg2):
+            try:
+                assert(self.right_coords(ctg1) < self.right_coords(ctg2))
+            except AssertionError:
+                print(ctg1 + " includes " + ctg2)
+            return True
+        else:
+            try:
+                assert(self.right_coords(ctg1) > self.right_coords(ctg2))
+            except AssertionError:
+                print(ctg2 + " includes " + ctg1)
+            return False
+        
     
     @classmethod
     def init_from_LR(cls,lr):
         newinst = cls()
-        newinst.add_lr_info(lr)
+        newinst.lr_info[lr[0]] = lr[1]
+        orientation0 = 0
+        orientation1 = 0
+        newinst.left_coords = dict()
+        newinst.right_coords = dict()
+        newinst.coords = [("","")]*lr[1]["length"]
+        newinst.length = lr[1]["length"]
+        for part in lr[1]["maps"]:
+            ctg = part["contig"]
+            if ctg.endswith("QBL"):
+                newinst.contigset.add(ctg)
+            # the orientation of the read is needed.
+            # Contigs are somewhat well defined with respect to
+            # their orientation, so a majority vote seems appropriate.
+            # This information is used later to turn the scaffold around
+            if part["strand"] == 0: 
+                orientation0 +=1
+                newinst.orientation[ctg] = 0
+            else:
+                orientation1 +=1
+                newinst.orientation[ctg] = 1
+            # Put information about the mapped contigs in the corresponding data structures
+            try: 
+                assert(not ctg in newinst.left_coords)
+            except AssertionError:
+                if ctg.startswith("QBL"):
+                    print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+            newinst.left_coords[ctg] = part["scr"]
+            try:
+                assert(not ctg in newinst.right_coords)
+            except AssertionError:
+                if ctg.startswith("QBL"):
+                    print("Contig " + ctg + " already exists in right_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+            newinst.right_coords[ctg] = part["ecr"]
+            newinst.coords[part["scr"]-1] = ("start",ctg)
+            newinst.coords[part["ecr"]-1] = ("end",ctg)
+            # checking whether the contig is already part of another scaffold happens elsewhere
+            if ctg.startswith("QBL"):
+                try:
+                    assert(not ctg in contig2scaffold)
+                except AssertionError:
+                    print("Contig " + ctg + " already exists in contig2scaffold. The reference " + str(contig2scaffold[ctg]) + " will be overwritten.")
+                contig2scaffold[ctg] = id(newinst)
+        # turn scaffold around
+        if orientation0 < orientation1 and orientation1 > 1:
+            newinst.turn_around()    
+           
+
         return newinst
 
     @staticmethod
@@ -86,10 +178,11 @@ with open(args.efile) as f:
         strand = int(sline[8])
         scr = int(sline[5])
         ecr = int(sline[6])
+        lenr = int(sline[7])
         scc = int(sline[9])
         ecc = int(sline[10])
-        lc = int(sline[11])
-        payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lc":lc}
+        lenc = int(sline[11])
+        payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lenc":lenc}
         if rid in reads:
             reads[rid]["maps"].append(payload)
         else:
@@ -103,7 +196,7 @@ scaffolds = {}
 greadst = {}
 for rid in reads:
     counter = 0
-    for item in reads[rid]["overlaps"]:
+    for item in reads[rid]["maps"]:
         if item["contig"].endswith("QBL"):
             greadst[rid] = reads[rid]
             break
@@ -111,18 +204,25 @@ for rid in reads:
 for rid in greadst:
     #print(reads[rid]["overlaps"])
     nscaff = Scaffold.init_from_LR((rid,reads[rid]))
+    #nscaff.add_lr_info((rid,greadst[rid]))
     scaffolds[id(nscaff)] = nscaff
-    soverlaps = sorted(reads[rid]["overlaps"], key = itemgetter("scr"))
-    greads[rid] = greadst[rid]
-    greads[rid]["overlaps"]=soverlaps
+    
+    
+    
+    #soverlaps = sorted(reads[rid]["maps"], key = itemgetter("scr"))
+    #greads[rid] = greadst[rid]
+    #greads[rid]["maps"]=soverlaps
 
-print(scaffolds)
+for idx,scaf in scaffolds.items():
+    #print(idx)
+    #scaf.print_coords()
+    pass
 
+sys.exit(0)
 
 
 # cluster np-reads 
 print("scaffolding long reads ....")
-contig2cluster = {}
 creads = {}
 clusternr = 0
 while len(greads) > 0:
