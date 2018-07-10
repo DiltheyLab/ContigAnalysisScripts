@@ -39,6 +39,7 @@ class Scaffold:
     sequence = ""
     nr_of_scaffolds = 0
     turned_around = False
+    idx = ""
     #id = 
     # All contigs will have scaffold coordinates.
     # Before scaffolds are merged all scaffold coordinates 
@@ -71,6 +72,12 @@ class Scaffold:
                 coordstr += "|"
         print(coordstr)
 
+    def print_contig_sequence(self):
+        sortedcontigs = sorted(self.contigset, key = lambda item: self.left_coords[item])
+        print("-".join(sortedcontigs))
+        
+    def print_id(self):
+        print(self.idx)
 
     def del_lr_info(self, lrid):
         pass
@@ -85,7 +92,7 @@ class Scaffold:
     # i.e. the coordinate system of the scaffold is reversed
     def turn_around(self):
         #self.turned_around = not self.turned_around
-        print("Turned " + str(id(self)) + " around.")
+        #print("Turned " + str(id(self)) + " around.")
         new_left_coords = {}
         new_right_coords = {}
         new_orientation = {}
@@ -126,42 +133,41 @@ class Scaffold:
             ctg = part["contig"]
             if ctg.endswith("QBL"):
                 newinst.contigset.add(ctg)
-            # the orientation of the read is needed.
+            # Put information about the mapped contigs in the corresponding data structures
+            try: 
+                assert(not ctg in newinst.left_coords)
+            except AssertionError:
+                if ctg.endswith("QBL"):
+                    print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+            newinst.left_coords[ctg] = part["scr"]
+            try:
+                assert(not ctg in newinst.right_coords)
+            except AssertionError:
+                if ctg.endswith("QBL"):
+                    print("Contig " + ctg + " already exists in right_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+            newinst.right_coords[ctg] = part["ecr"]
+            newinst.coords[part["scr"]-1] = ("start",ctg)
+            newinst.coords[part["ecr"]-1] = ("end",ctg)
+            # checking whether the contig is already part of another scaffold happens elsewhere
+            if ctg.endswith("QBL"):
+                try:
+                    assert(not ctg in contig2scaffold)
+                except AssertionError:
+                    print("Contig " + ctg + " already exists in contig2scaffold. The reference " + str(contig2scaffold[ctg]) + " will be overwritten.")
+                contig2scaffold[ctg] = id(newinst)
+            # The orientation of the read is needed.
             # Contigs are somewhat well defined with respect to
             # their orientation, so a majority vote seems appropriate.
-            # This information is used later to turn the scaffold around
             if part["strand"] == 0: 
                 orientation0 +=1
                 newinst.orientation[ctg] = 0
             else:
                 orientation1 +=1
                 newinst.orientation[ctg] = 1
-            # Put information about the mapped contigs in the corresponding data structures
-            try: 
-                assert(not ctg in newinst.left_coords)
-            except AssertionError:
-                if ctg.startswith("QBL"):
-                    print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
-            newinst.left_coords[ctg] = part["scr"]
-            try:
-                assert(not ctg in newinst.right_coords)
-            except AssertionError:
-                if ctg.startswith("QBL"):
-                    print("Contig " + ctg + " already exists in right_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
-            newinst.right_coords[ctg] = part["ecr"]
-            newinst.coords[part["scr"]-1] = ("start",ctg)
-            newinst.coords[part["ecr"]-1] = ("end",ctg)
-            # checking whether the contig is already part of another scaffold happens elsewhere
-            if ctg.startswith("QBL"):
-                try:
-                    assert(not ctg in contig2scaffold)
-                except AssertionError:
-                    print("Contig " + ctg + " already exists in contig2scaffold. The reference " + str(contig2scaffold[ctg]) + " will be overwritten.")
-                contig2scaffold[ctg] = id(newinst)
         # turn scaffold around
         if orientation0 < orientation1 and orientation1 > 1:
             newinst.turn_around()    
-           
+        newinst.idx = id(newinst)
 
         return newinst
 
@@ -215,8 +221,12 @@ for rid in greadst:
 
 for idx,scaf in scaffolds.items():
     #print(idx)
-    #scaf.print_coords()
+    #scaf.print_contig_sequence()
     pass
+
+scaf = scaffolds[contig2scaffold["1126QBL"]]
+scaf.print_id()
+scaf.print_contig_sequence()
 
 sys.exit(0)
 
