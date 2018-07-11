@@ -131,9 +131,13 @@ class Scaffold:
             print(scstring1)
             print(scstring2)
 
+    # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
+    # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
     def merge(self, scaf2):
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
+        for rid, read in scaf2.sr_info.items():
+            self.sr_info[rid] = read
         same_orientation = 0
         same_ctgs = self.contigset.intersection(scaf2.contigset)
         #print(same_ctgs)
@@ -163,6 +167,10 @@ class Scaffold:
             print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
             return
         
+        for nr,ctg in sortedctgs1.items():
+        # the easier case 
+            if (scaf2.left_coords[ctg]-self.left_coords[ctg]) - (scaf2.left_coords_contig[ctg] - self.left_coords_contig[ctg]) > 0: 
+                if scaf2.left_coords_contig[ctg] > 
         
         #print(self.get_leftmost(same_ctgs))
         #print(scaf2.get_leftmost(same_ctgs))
@@ -223,12 +231,7 @@ class Scaffold:
         if orientation0 < orientation1 and orientation1 > 1:
             newinst.turn_around()    
         newinst.idx = id(newinst)
-
         return newinst
-
-    @staticmethod
-    def return_contig_set():
-        return contigset
 
 # nanopore read info
 with open(args.efile) as f:
