@@ -55,8 +55,6 @@ class Scaffold:
     def add_sr_info(self, sr):
         pass
     
-    def add_lr_info(self, lr):
-        pass
 
     def print_contigset(self):
         sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip("QBL")))
@@ -93,9 +91,9 @@ class Scaffold:
     def turn_around(self):
         #self.turned_around = not self.turned_around
         #print("Turned " + str(id(self)) + " around.")
-        new_left_coords = {}
-        new_right_coords = {}
-        new_orientation = {}
+        new_left_coords = dict()
+        new_right_coords = dict()
+        new_orientation = dict()
         for contig in self.contigset:
             new_right_coords[contig] = self.length - self.left_coords[contig] 
             new_left_coords[contig] = self.length - self.right_coords[contig] 
@@ -117,6 +115,59 @@ class Scaffold:
             except AssertionError:
                 print(ctg2 + " includes " + ctg1)
             return False
+
+    def get_leftmost(self,ctgset):
+        sortedcontigs = sorted(ctgset, key = lambda item: self.left_coords[item])
+        return(sortedcontigs[0])
+
+
+    def find_conflicts(self):
+        sortedcontigs = sorted(self.contigset, key = lambda item: self.left_coords[item])
+        sortedcontigs2 = sorted(self.contigset, key = lambda item: self.right_coords[item])
+        scstring1 = "-".join(sortedcontigs)
+        scstring2 = "-".join(sortedcontigs2)
+        if scstring1 != scstring2:
+            print("Conflict!")
+            print(scstring1)
+            print(scstring2)
+
+    def merge(self, scaf2):
+        for rid, read in scaf2.lr_info.items():
+            self.lr_info[rid] = read
+        same_orientation = 0
+        same_ctgs = self.contigset.intersection(scaf2.contigset)
+        #print(same_ctgs)
+        same_orientation=0
+        different_orientation = 0
+        for ctg in same_ctgs:
+            if self.orientation[ctg] != scaf2.orientation[ctg]:
+                different_orientation += 1
+            else:
+                same_orientation += 1
+        if different_orientation > 0 and same_orientation > 0 :
+            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are oriented differentely in the two scaffolds.")
+            for ctg in same_ctgs:
+                print(ctg + ": " + str(self.orientation[ctg]) + "  " + str(scaf2.orientation[ctg]))
+            return    
+        if different_orientation > same_orientation : 
+            scaf2.turn_around()
+            
+        offsets = []
+        for ctg in same_ctgs:
+            offsets.append((scaf2.left_coords[ctg]-self.left_coords[ctg]) - (scaf2.left_coords_contig[ctg] - self.left_coords_contig[ctg]))
+            offsets.append((scaf2.right_coords[ctg]-self.right_coords[ctg]) - (scaf2.right_coords_contig[ctg] - self.right_coords_contig[ctg]))
+        #print(offsets)
+        sortedctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
+        sortedctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
+        if "-".join(sortedctgs1) != "-".join(sortedctgs2):
+            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
+            return
+        
+        
+        #print(self.get_leftmost(same_ctgs))
+        #print(scaf2.get_leftmost(same_ctgs))
+        
+        
         
     
     @classmethod
@@ -125,8 +176,11 @@ class Scaffold:
         newinst.lr_info[lr[0]] = lr[1]
         orientation0 = 0
         orientation1 = 0
+        newinst.orientation= dict()
         newinst.left_coords = dict()
+        newinst.left_coords_contig = dict()
         newinst.right_coords = dict()
+        newinst.right_coords_contig = dict()
         newinst.coords = [("","")]*lr[1]["length"]
         newinst.length = lr[1]["length"]
         for part in lr[1]["maps"]:
@@ -139,22 +193,23 @@ class Scaffold:
             except AssertionError:
                 if ctg.endswith("QBL"):
                     print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+                    continue
             newinst.left_coords[ctg] = part["scr"]
-            try:
-                assert(not ctg in newinst.right_coords)
-            except AssertionError:
-                if ctg.endswith("QBL"):
-                    print("Contig " + ctg + " already exists in right_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
+            newinst.left_coords_contig[ctg] = part["scc"]
             newinst.right_coords[ctg] = part["ecr"]
+            newinst.right_coords_contig[ctg] = part["ecc"]
             newinst.coords[part["scr"]-1] = ("start",ctg)
             newinst.coords[part["ecr"]-1] = ("end",ctg)
             # checking whether the contig is already part of another scaffold happens elsewhere
             if ctg.endswith("QBL"):
-                try:
-                    assert(not ctg in contig2scaffold)
-                except AssertionError:
-                    print("Contig " + ctg + " already exists in contig2scaffold. The reference " + str(contig2scaffold[ctg]) + " will be overwritten.")
-                contig2scaffold[ctg] = id(newinst)
+                #try:
+                #    assert(not ctg in contig2scaffold)
+                #except AssertionError:
+                #    print("Contig " + ctg + " already exists in contig2scaffold. The reference " + str(contig2scaffold[ctg]) + " will be overwritten.")
+                if ctg in contig2scaffold:
+                    contig2scaffold[ctg].append(id(newinst))
+                else:
+                    contig2scaffold[ctg] = [id(newinst)]
             # The orientation of the read is needed.
             # Contigs are somewhat well defined with respect to
             # their orientation, so a majority vote seems appropriate.
@@ -208,85 +263,31 @@ for rid in reads:
             break
 
 for rid in greadst:
-    #print(reads[rid]["overlaps"])
     nscaff = Scaffold.init_from_LR((rid,reads[rid]))
-    #nscaff.add_lr_info((rid,greadst[rid]))
     scaffolds[id(nscaff)] = nscaff
-    
-    
-    
-    #soverlaps = sorted(reads[rid]["maps"], key = itemgetter("scr"))
-    #greads[rid] = greadst[rid]
-    #greads[rid]["maps"]=soverlaps
 
 for idx,scaf in scaffolds.items():
-    #print(idx)
-    #scaf.print_contig_sequence()
-    pass
+    scaf.find_conflicts()
 
-scaf = scaffolds[contig2scaffold["1126QBL"]]
-scaf.print_id()
-scaf.print_contig_sequence()
 
-sys.exit(0)
 
 
 # cluster np-reads 
 print("scaffolding long reads ....")
 creads = {}
 clusternr = 0
-while len(greads) > 0:
-    clusternr += 1
-    current_cluster = {}
-    current_contigs = set()
-    # take a random read and build a cluster from it
-    cr = greads.popitem()
-    current_cluster[cr[0]] = cr[1]
-    olen = 0
-    while len(current_cluster) != olen:
-        olen = len(current_cluster)
-        for contig in cr[1]["overlaps"]:
-            if not contig["contig"].startswith("chr"):
-                contigs.pop(contig["contig"], None)
-                current_contigs.add(contig["contig"])
-                contig2cluster[contig["contig"]] = clusternr
-        for readid,readval in greads.items():
-            contig_found = False
-            for contig in readval["overlaps"]:
-                if not contig["contig"].startswith("chr"):
-                    if contig["contig"] in current_contigs:
-                        contig_found = True
-                        current_cluster[readid] = readval
-                        cr = (readid, greads.pop(readid))
-                        break
-                   
-            if contig_found:
-                break
-    creads[clusternr] = current_cluster
+olen_scaf = len(scaffolds)+1
+while len(scaffolds)-olen_scaf != 0:
+    olen_scaf = len(scaffolds)
+    for contig in contig2scaffold:
+        if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
+            #print(contig2scaffold[contig])
+            scaffolds[contig2scaffold[contig][0]].merge(scaffolds[contig2scaffold[contig][1]])
 print("Nr. of scaffolds: " + str(clusternr+len(contigs)) + " (" + str(clusternr) + " cluster + " + str(len(contigs))+ " contigs)")
 
-# simpler data structure to collect contigs into scaffolds
-#scaffolds={}
-for i, cluster in creads.items():
-    current_contigs = set([])
-    for readid,read in cluster.items():
-        #print(read)
-        for contig in read["overlaps"]:
-            if not contig["contig"].startswith("chr"):
-                current_contigs.add(contig["contig"])
-    scaffolds[i] = current_contigs
-#print(scaffolds)
+sys.exit(0)
 
-def addcontig(ctg, cluster):
-    contig2cluster[ctg] = cluster
-    scaffolds[cluster].add(ctg)
-    contigs.pop(ctg, None)
-    
-def mergecluster(cluster1, cluster2):
-    for contig in scaffolds[cluster2]:
-        contig2cluster[contig] = cluster1
-        scaffolds[cluster1].add(contig)
-    scaffolds.pop(cluster2)
+
 
 # very lenient clustering of short reads
 print("scaffolding short reads ....")
