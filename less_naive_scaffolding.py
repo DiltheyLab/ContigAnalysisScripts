@@ -183,27 +183,35 @@ class Scaffold:
         # The premise for this extension is, the more of a contig can be mappped, the better. 
         # The mapped portion of the contigs is extended, if more of the contig is mapped on the other scaffold
         offset = 0
+        nleft_coords = {}
+        nright_coords = {}
+        nleft_coords_contig = {}
+        nright_coords_contig = {}
         for nr,ctg in lsorted_ctgs.items():
-            pass
-
-        
-        for nr,ctg in sortedctgs1.items():
-        # the easier case 
-            if (scaf2.left_coords[ctg]-self.left_coords[ctg]) - (scaf2.left_coords_contig[ctg] - self.left_coords_contig[ctg]) > 0: 
-                 self.left_coords_contig[ctg] = min(scaf2.left_coords_contig[ctg], self.left_coords_contig[ctg])
-                 self.right_coords_contig[ctg] = max(scaf2.right_coords_contig[ctg], self.right_coords_contig[ctg])
+            if not ctg in same_ctgs:
+                nleft_coords[ctg] = lscaf.left_coords[ctg] + offset
+                nright_coords[ctg] = lscaf.right_coords[ctg] + offset
+                nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg]
+                nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg]
+                # potentially new contigs are added to the self-contigset, as self is the scaffold that will ultimately be changed
+                self.contigset(ctg)
+            else: 
+                delta_left_coord_contig = lscaf.left_coords_contig[ctg] - rscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] > rscaf.left_coords_contig[ctg] else 0
+                delta_right_coord_contig = rscaf.right_coords_contig[ctg] - lscaf.right_coords_contig[ctg] if lscaf.right_coords_contig[ctg] < rscaf.right_coords_contig[ctg]  else 0
+                nleft_coords[ctg] = lscaf.left_coords[ctg]-delta_left_coord_contig + offset
+                nright_coords[ctg] = lscaf.lright_coords[ctg]-delta_right_coord_contig + offset
+                nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg] - delta_left_coord_contig
+                nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg] + delta_right_coord_contig
+                offset += delta_left_coord_contig + delta_right_coord_contig
                     
                 
         #change lcoords
         #change rcoords
-        #change coords
-        #change orientation
+        #change coords in the end
         #change contigset
         #change nr_of_scaffolds
-        #not chnage idx 
+        #delete old scaf2
         
-        #print(self.get_leftmost(same_ctgs))
-        #print(scaf2.get_leftmost(same_ctgs))
         
         
         
