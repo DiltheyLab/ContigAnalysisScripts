@@ -161,16 +161,46 @@ class Scaffold:
             offsets.append((scaf2.left_coords[ctg]-self.left_coords[ctg]) - (scaf2.left_coords_contig[ctg] - self.left_coords_contig[ctg]))
             offsets.append((scaf2.right_coords[ctg]-self.right_coords[ctg]) - (scaf2.right_coords_contig[ctg] - self.right_coords_contig[ctg]))
         #print(offsets)
-        sortedctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
-        sortedctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
-        if "-".join(sortedctgs1) != "-".join(sortedctgs2):
+        sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
+        sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
+        if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
             print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
             return
+        
+        # This whole thing is not overly complicated but certainly tedious
+        # First the scaffold that's more to the left is worked on, this is easier as coordinates don't change much in this scaffold
+        lctg = sorted_same_ctgs1[0]
+        if self.left_coords[lctg] < scaf2.left_coords[lctg]: # smaller means there is less DNA to the left so the scaffold is more right than the other
+            lscaf = scaf2
+            rscaf = self
+        else:
+            lscaf = self
+            rscaf = scaf2
+
+        lsorted_ctgs= sorted(lscaf.contigset, key = lambda item: lscaf.left_coords[item])
+        rsorted_ctgs= sorted(rscaf.contigset, key = lambda item: rscaf.left_coords[item])
+
+        # The premise for this extension is, the more of a contig can be mappped, the better. 
+        # The mapped portion of the contigs is extended, if more of the contig is mapped on the other scaffold
+        offset = 0
+        for nr,ctg in lsorted_ctgs.items():
+            pass
+
         
         for nr,ctg in sortedctgs1.items():
         # the easier case 
             if (scaf2.left_coords[ctg]-self.left_coords[ctg]) - (scaf2.left_coords_contig[ctg] - self.left_coords_contig[ctg]) > 0: 
-                if scaf2.left_coords_contig[ctg] > 
+                 self.left_coords_contig[ctg] = min(scaf2.left_coords_contig[ctg], self.left_coords_contig[ctg])
+                 self.right_coords_contig[ctg] = max(scaf2.right_coords_contig[ctg], self.right_coords_contig[ctg])
+                    
+                
+        #change lcoords
+        #change rcoords
+        #change coords
+        #change orientation
+        #change contigset
+        #change nr_of_scaffolds
+        #not chnage idx 
         
         #print(self.get_leftmost(same_ctgs))
         #print(scaf2.get_leftmost(same_ctgs))
