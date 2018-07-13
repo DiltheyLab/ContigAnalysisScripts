@@ -131,6 +131,7 @@ class Scaffold:
             print(scstring1)
             print(scstring2)
 
+
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
     def merge(self, scaf2):
@@ -187,22 +188,60 @@ class Scaffold:
         nright_coords = {}
         nleft_coords_contig = {}
         nright_coords_contig = {}
-        for nr,ctg in lsorted_ctgs.items():
+        ncontigset = self.contigset.copy()
+        for ctg in lsorted_ctgs:
             if not ctg in same_ctgs:
                 nleft_coords[ctg] = lscaf.left_coords[ctg] + offset
                 nright_coords[ctg] = lscaf.right_coords[ctg] + offset
                 nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg]
                 nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg]
                 # potentially new contigs are added to the self-contigset, as self is the scaffold that will ultimately be changed
-                self.contigset(ctg)
+                ncontigset.add(ctg)
             else: 
                 delta_left_coord_contig = lscaf.left_coords_contig[ctg] - rscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] > rscaf.left_coords_contig[ctg] else 0
                 delta_right_coord_contig = rscaf.right_coords_contig[ctg] - lscaf.right_coords_contig[ctg] if lscaf.right_coords_contig[ctg] < rscaf.right_coords_contig[ctg]  else 0
                 nleft_coords[ctg] = lscaf.left_coords[ctg]-delta_left_coord_contig + offset
-                nright_coords[ctg] = lscaf.lright_coords[ctg]-delta_right_coord_contig + offset
+                nright_coords[ctg] = lscaf.right_coords[ctg]-delta_right_coord_contig + offset
                 nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg] - delta_left_coord_contig
                 nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg] + delta_right_coord_contig
                 offset += delta_left_coord_contig + delta_right_coord_contig
+
+        # For the right scaffold this helper function is needed
+        def get_anchors(scaf1, current_ctg):
+            lanchor = None
+            ranchor = None
+            sorted_ctgs = sorted(scaf1.contigset, key = lambda item: scaf1.left_coords[item])
+            ctg_index = sorted_ctgs.index(current_ctg)
+            idx = ctg_index - 1
+            while idx >= 0: 
+                nctg = sorted_ctgs[idx]
+                if nctg in same_ctgs:
+                    lanchor = nctg
+                    break
+                idx -= 1
+            idx = ctg_index + 1
+            while idx < len(sorted_ctgs):
+                nctg = sorted_ctgs[idx]
+                if nctg in same_ctgs:
+                    ranchor = nctg
+                    break
+                idx += 1
+            return (lanchor, ranchor)
+        
+        def add_with_left_anchor():
+        def add_with_left_anchor():
+            
+        for ctg in rsorted_ctgs:
+            if ctg in same_ctgs:
+                pass # this has been taken care of in the left scaffold
+            else: # contig exclusive to the right scaffold
+                lanchor, ranchor = get_anchors(rscaf,ctg) 
+                if lanchor and ranchor:
+                    left_coords[ctg] - right_coords[lanchor] < left_coords[ranchor] - right_coords[ctg]:
+                         
+        #print(sorted(lscaf.left_coords.items(), key= lambda x: x[1]))
+        #print(sorted(nleft_coords.items(), key= lambda x: x[1]))
+        sys.exit(0)
                     
                 
         #change lcoords
