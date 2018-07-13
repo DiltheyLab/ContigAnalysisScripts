@@ -131,10 +131,14 @@ class Scaffold:
             print(scstring1)
             print(scstring2)
 
+    def to_SVG(xoff, yoff):
+
+
 
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
     def merge(self, scaf2):
+        print("merging " + str(id(self)) + " and " + str(id(scaf2)))
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
@@ -166,6 +170,8 @@ class Scaffold:
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
         if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
             print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
+            self.print_contig_sequence()
+            scaf2.print_contig_sequence()
             return
         
         # This whole thing is not overly complicated but certainly tedious
@@ -188,8 +194,10 @@ class Scaffold:
         nright_coords = {}
         nleft_coords_contig = {}
         nright_coords_contig = {}
+        norientation = {}
         ncontigset = self.contigset.copy()
         for ctg in lsorted_ctgs:
+            norientation[ctg] = lscaf.orientation[ctg]
             if not ctg in same_ctgs:
                 nleft_coords[ctg] = lscaf.left_coords[ctg] + offset
                 nright_coords[ctg] = lscaf.right_coords[ctg] + offset
@@ -249,6 +257,7 @@ class Scaffold:
                 pass # this has been taken care of in the left scaffold
             else: # contig exclusive to the right scaffold
                 ncontigset.add(ctg)
+                norientation[ctg] = rscaf.orientation[ctg]
                 lanchor, ranchor = get_anchors(rscaf,ctg) 
                 if lanchor and ranchor:
                     if rscaf.left_coords[ctg] - rscaf.right_coords[lanchor] < rscaf.left_coords[ranchor] - rscaf.right_coords[ctg]:
@@ -268,9 +277,12 @@ class Scaffold:
         self.right_coords = nright_coords
         self.left_coords_contig = nleft_coords_contig
         self.right_coords_contig = nright_coords_contig
+        self.orientation = norientation
         Scaffold.nr_of_scaffolds -= 1
         #self.print_contig_sequence()
         #scaf2.print_contig_sequence()
+        for ctg in scaf2.contigset:
+            contig2scaffold[ctg].remove(id(scaf2))
         del(scaffolds[id(scaf2)])
         
     
@@ -386,7 +398,6 @@ while len(scaffolds)-olen_scaf != 0:
             scaffolds[contig2scaffold[contig][0]].merge(scaffolds[contig2scaffold[contig][1]])
             print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
             break
-
 sys.exit(0)
 
 
