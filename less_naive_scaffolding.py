@@ -206,7 +206,7 @@ class Scaffold:
                 nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg] + delta_right_coord_contig
                 offset += delta_left_coord_contig + delta_right_coord_contig
 
-        # For the right scaffold this helper function is needed
+        # For the right scaffold these helper functions are needed
         def get_anchors(scaf1, current_ctg):
             lanchor = None
             ranchor = None
@@ -228,31 +228,50 @@ class Scaffold:
                 idx += 1
             return (lanchor, ranchor)
         
-        def add_with_left_anchor():
-        def add_with_left_anchor():
+        def add_with_left_anchor(anchor, ctg, this_scaf):
+            delta = this_scaf.left_coords[ctg] - this_scaf.right_coords[anchor] 
+            delta += nright_coords_contig[anchor] - this_scaf.right_coords_contig[anchor]
+            nleft_coords[ctg] = nright_coords[anchor] + delta
+            nright_coords[ctg] = nleft_coords[ctg] + (this_scaf.right_coords_contig[ctg] - this_scaf.left_coords_contig[ctg])
+            nleft_coords_contig[ctg] = this_scaf.left_coords_contig[ctg]
+            nright_coords_contig[ctg] = this_scaf.right_coords_contig[ctg]
+
+        def add_with_right_anchor(anchor, ctg, this_scaf):
+            delta = this_scaf.left_coords[anchor] - this_scaf.right_coords[ctg] 
+            delta += nleft_coords_contig[anchor] - this_scaf.left_coords_contig[anchor]
+            nright_coords[ctg] = nleft_coords[anchor] - delta
+            nleft_coords[ctg] = nright_coords[ctg] - (this_scaf.right_coords_contig[ctg] - this_scaf.left_coords_contig[ctg])
+            nleft_coords_contig[ctg] = this_scaf.left_coords_contig[ctg]
+            nright_coords_contig[ctg] = this_scaf.right_coords_contig[ctg]
             
         for ctg in rsorted_ctgs:
             if ctg in same_ctgs:
                 pass # this has been taken care of in the left scaffold
             else: # contig exclusive to the right scaffold
+                ncontigset.add(ctg)
                 lanchor, ranchor = get_anchors(rscaf,ctg) 
                 if lanchor and ranchor:
-                    left_coords[ctg] - right_coords[lanchor] < left_coords[ranchor] - right_coords[ctg]:
-                         
-        #print(sorted(lscaf.left_coords.items(), key= lambda x: x[1]))
-        #print(sorted(nleft_coords.items(), key= lambda x: x[1]))
-        sys.exit(0)
-                    
-                
-        #change lcoords
-        #change rcoords
-        #change coords in the end
-        #change contigset
-        #change nr_of_scaffolds
-        #delete old scaf2
-        
-        
-        
+                    if rscaf.left_coords[ctg] - rscaf.right_coords[lanchor] < rscaf.left_coords[ranchor] - rscaf.right_coords[ctg]:
+                        add_with_left_anchor(lanchor, ctg, rscaf)
+                    else:
+                        add_with_right_anchor(ranchor, ctg, rscaf)
+                elif lanchor:
+                    add_with_left_anchor(lanchor, ctg, rscaf)
+                else:
+                    add_with_right_anchor(ranchor, ctg, rscaf)
+
+        # collect everything in this scaffold and get rid of scaf2
+        #self.print_contig_sequence()
+        #scaf2.print_contig_sequence()
+        self.contigset = ncontigset
+        self.left_coords = nleft_coords
+        self.right_coords = nright_coords
+        self.left_coords_contig = nleft_coords_contig
+        self.right_coords_contig = nright_coords_contig
+        Scaffold.nr_of_scaffolds -= 1
+        #self.print_contig_sequence()
+        #scaf2.print_contig_sequence()
+        del(scaffolds[id(scaf2)])
         
     
     @classmethod
@@ -272,6 +291,8 @@ class Scaffold:
             ctg = part["contig"]
             if ctg.endswith("QBL"):
                 newinst.contigset.add(ctg)
+                if ctg in contigs:
+                    del(contigs[ctg])
             # Put information about the mapped contigs in the corresponding data structures
             try: 
                 assert(not ctg in newinst.left_coords)
@@ -363,7 +384,8 @@ while len(scaffolds)-olen_scaf != 0:
         if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
             #print(contig2scaffold[contig])
             scaffolds[contig2scaffold[contig][0]].merge(scaffolds[contig2scaffold[contig][1]])
-print("Nr. of scaffolds: " + str(clusternr+len(contigs)) + " (" + str(clusternr) + " cluster + " + str(len(contigs))+ " contigs)")
+            print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
+            break
 
 sys.exit(0)
 
