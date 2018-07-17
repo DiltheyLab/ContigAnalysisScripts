@@ -6,12 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from operator import itemgetter
 from itertools import combinations
+import svgwrite
 
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
+parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
 
@@ -36,6 +38,7 @@ class Scaffold:
     right_coords = dict()
     orientation = dict()
     contigset = set()
+    length = 0
     sequence = ""
     nr_of_scaffolds = 0
     turned_around = False
@@ -94,6 +97,9 @@ class Scaffold:
         new_left_coords = dict()
         new_right_coords = dict()
         new_orientation = dict()
+        if "54QBL" in self.contigset:
+            print(self.left_coords)
+            print(self.right_coords)
         for contig in self.contigset:
             new_right_coords[contig] = self.length - self.left_coords[contig] 
             new_left_coords[contig] = self.length - self.right_coords[contig] 
@@ -101,6 +107,9 @@ class Scaffold:
         self.left_coords = new_left_coords
         self.right_coords = new_right_coords
         self.orientation = new_orientation
+        if "54QBL" in self.contigset:
+            print(self.left_coords)
+            print(self.right_coords)
 
     def is_left_of(self,ctg1, ctg2):
         if self.left_coords(ctg1) < self.left_coords(ctg2):
@@ -131,22 +140,60 @@ class Scaffold:
             print(scstring1)
             print(scstring2)
 
-    def to_SVG(xoff, yoff):
+    def to_SVG(self, img, xoff, yoff):
+        if "54QBL" in self.contigset:
+            print(self.left_coords)
+            print(self.right_coords)
+        ypad = 10
+        img.add(dwg.line((xoff, yoff+ypad), ( xoff + self.length/100, yoff+ypad), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        above = True
+        col = "black"
+        for ctg in self.contigset:
+            #print(read)
+            sc = self.left_coords[ctg]
+            ec = self.right_coords[ctg]
+            ctgn = ctg.rstrip("QBL")
+            #ctg = read[0]
+            if ctg.startswith("chr"):
+                ctgn = ctgn[0:9]
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypad-3), ((ec-sc)/100,6), stroke='black', stroke_width=1, fill = 'white'))
+            if above:
+                yt = yoff+ypad-4
+                col = "blue" if col == "black" else "black"
+            else:
+                yt = yoff+ypad+7
+            above = not above
+            img.add(dwg.text(ctgn, insert=(xoff+sc/100,yt),fill=col, style="font-size:4"))
+            if self.orientation[ctg] == 0:
+                direction = ">"
+            else:
+                direction = "<"
+            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypad+2),style="font-size:6"))
+
 
 
 
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
     def merge(self, scaf2):
-        print("merging " + str(id(self)) + " and " + str(id(scaf2)))
+        if "54QBL" in scaf2.contigset:
+            print("ok?")
+            print(scaf2.lr_info.keys())
+            print(scaf2.left_coords)
+            print(scaf2.right_coords)
+        if "54QBL" in self.contigset:
+            print("hwhat?")
+            print(self.lr_info.keys())
+            print(self.left_coords)
+            print(self.right_coords)
+        #print("merging " + str(id(self)) + " and " + str(id(scaf2)))
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
             self.sr_info[rid] = read
-        same_orientation = 0
         same_ctgs = self.contigset.intersection(scaf2.contigset)
         #print(same_ctgs)
-        same_orientation=0
+        same_orientation= 0
         different_orientation = 0
         for ctg in same_ctgs:
             if self.orientation[ctg] != scaf2.orientation[ctg]:
@@ -196,6 +243,7 @@ class Scaffold:
         nright_coords_contig = {}
         norientation = {}
         ncontigset = self.contigset.copy()
+        # First the left scaffold is added
         for ctg in lsorted_ctgs:
             norientation[ctg] = lscaf.orientation[ctg]
             if not ctg in same_ctgs:
@@ -213,6 +261,15 @@ class Scaffold:
                 nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg] - delta_left_coord_contig
                 nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg] + delta_right_coord_contig
                 offset += delta_left_coord_contig + delta_right_coord_contig
+                if "54QBL" in self.contigset:
+                    print("nleft_coords:" + str(nleft_coords))
+                    print("offset:" + str(offset))
+                    print("dlcc: " + str(delta_left_coord_contig))
+                    print("drcc: " + str(delta_right_coord_contig))
+                    print("llcc: " + str(lscaf.left_coords_contig[ctg]))
+                    print("lrcc: " + str(lscaf.right_coords_contig[ctg]))
+                    print("rlcc: " + str(rscaf.left_coords_contig[ctg]))
+                    print("rrcc: " + str(rscaf.right_coords_contig[ctg]))
 
         # For the right scaffold these helper functions are needed
         def get_anchors(scaf1, current_ctg):
@@ -251,7 +308,8 @@ class Scaffold:
             nleft_coords[ctg] = nright_coords[ctg] - (this_scaf.right_coords_contig[ctg] - this_scaf.left_coords_contig[ctg])
             nleft_coords_contig[ctg] = this_scaf.left_coords_contig[ctg]
             nright_coords_contig[ctg] = this_scaf.right_coords_contig[ctg]
-            
+
+        # Now the right scaffold is added    
         for ctg in rsorted_ctgs:
             if ctg in same_ctgs:
                 pass # this has been taken care of in the left scaffold
@@ -269,9 +327,20 @@ class Scaffold:
                 else:
                     add_with_right_anchor(ranchor, ctg, rscaf)
 
+        # Calculate new length
+        distr = rscaf.length - rscaf.right_coords[rsorted_ctgs[-1]]
+        distl = lscaf.length - lscaf.right_coords[lsorted_ctgs[-1]]
+        nsorted_ctgs = sorted(ncontigset, key = lambda item: nright_coords[item])
+        last_ctg = nsorted_ctgs[-1]
+        if last_ctg in lscaf.contigset:
+            if last_ctg in rscaf.contigset:
+                self.length = nright_coords[last_ctg] + distr if distr > distl else distl
+            else:
+                self.length = nright_coords[last_ctg] + distl
+        else:
+            self.length = nright_coords[last_ctg] + distr
+
         # collect everything in this scaffold and get rid of scaf2
-        #self.print_contig_sequence()
-        #scaf2.print_contig_sequence()
         self.contigset = ncontigset
         self.left_coords = nleft_coords
         self.right_coords = nright_coords
@@ -289,6 +358,7 @@ class Scaffold:
     @classmethod
     def init_from_LR(cls,lr):
         newinst = cls()
+        newinst.lr_info = dict()
         newinst.lr_info[lr[0]] = lr[1]
         orientation0 = 0
         orientation1 = 0
@@ -338,8 +408,9 @@ class Scaffold:
                 orientation1 +=1
                 newinst.orientation[ctg] = 1
         # turn scaffold around
-        if orientation0 < orientation1 and orientation1 > 1:
+        if orientation0 < orientation1:
             newinst.turn_around()    
+        
         newinst.idx = id(newinst)
         return newinst
 
@@ -371,7 +442,7 @@ greadst = {}
 for rid in reads:
     counter = 0
     for item in reads[rid]["maps"]:
-        if item["contig"].endswith("QBL"):
+        if item["contig"].endswith("QBL") and item["contig"] != "1036QBL":
             greadst[rid] = reads[rid]
             break
 
@@ -398,55 +469,23 @@ while len(scaffolds)-olen_scaf != 0:
             scaffolds[contig2scaffold[contig][0]].merge(scaffolds[contig2scaffold[contig][1]])
             print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
             break
+
+
+# Draw SVG
+ypos = 0
+xtext = 10
+xpad = 200
+ypad = 10
+dwg = svgwrite.Drawing(args.SVG,size=(u'1700', u'4600'), profile='full')
+csize = 0
+toggle = False
+for scaf in scaffolds.values():
+    #print(scaf.orientation)
+    dwg.add(dwg.text(id(scaf), insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
+    ypos += 20
+    scaf.to_SVG(dwg, xpad, ypos)
+
+dwg.save()
+
 sys.exit(0)
 
-
-
-# very lenient clustering of short reads
-print("scaffolding short reads ....")
-with open(args.summaryfile) as f:
-    for line in f:
-        sline = line.split()
-        ctg1 = sline[0].split("_")[0].strip("+").strip("-")
-        ctg2 = sline[0].split("_")[1].strip("+").strip("-")
-        if sline[1] == "NA":
-            continue
-        if int(sline[2]) < args.mindepth:
-            continue
-        #moddist = float(sline[1])
-        if ctg1 in contig2cluster:
-            if ctg2 in contig2cluster:
-                if contig2cluster[ctg1] != contig2cluster[ctg2]:
-                    #print("merging clusters " + str(contig2cluster[ctg1]) + " and " + str(contig2cluster[ctg2]))
-                    mergecluster(contig2cluster[ctg1], contig2cluster[ctg2])
-            else:
-                addcontig(ctg2, contig2cluster[ctg1])
-            #print("cluster of ctg1 (" + ctg1 + "): " + str(contig2cluster[ctg1]))
-        elif ctg2 in contig2cluster:
-            addcontig(ctg1, contig2cluster[ctg2])
-        else:
-            clusternr += 1
-            #print("new cluster: " + str(clusternr))
-            scaffolds[clusternr] = set([ctg1, ctg2])
-            contig2cluster[ctg1] = clusternr
-            contig2cluster[ctg2] = clusternr
-            contigs.pop(ctg1, None)
-            contigs.pop(ctg2, None)
-            
-            
-print("Nr. of scaffolds: " + str(len(scaffolds)+len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
-#print(contigs)
-for scaf in scaffolds:
-    print(scaffolds[scaf])
-    sys.exit(0)
-def get_rightmost_contig(scaf_id):
-    print(creads[scaf_id])
-    if len(creads[scaf_id]) > 1:
-        print("not implemented yet")
-    else:
-        rid, read = creads[scaf_id].items()
-        for ov in read["overlaps"]:
-            print(ov)
-
-#get_rightmost_contig(1)
-#sys.exit(0)
