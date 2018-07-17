@@ -33,6 +33,7 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 class Scaffold:
     sr_info = dict()
     lr_info = dict()
+    longread_coords = dict()
     coords = []
     left_coords = dict()
     right_coords = dict()
@@ -170,12 +171,87 @@ class Scaffold:
                 direction = "<"
             img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypad+2),style="font-size:6"))
 
+    def merge(self,scaf2):
+        for rid, read in scaf2.lr_info.items():
+            self.lr_info[rid] = read
+        for rid, read in scaf2.sr_info.items():
+            self.sr_info[rid] = read
+        same_ctgs = self.contigset.intersection(scaf2.contigset)
+        same_orientation= 0
+        different_orientation = 0
+        for ctg in same_ctgs:
+            if self.orientation[ctg] != scaf2.orientation[ctg]:
+                different_orientation += 1
+            else:
+                same_orientation += 1
+        if different_orientation > 0 and same_orientation > 0 :
+            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are oriented differentely in the two scaffolds.")
+            for ctg in same_ctgs:
+                print(ctg + ": " + str(self.orientation[ctg]) + "  " + str(scaf2.orientation[ctg]))
+            return    
+        if different_orientation > same_orientation : 
+            scaf2.turn_around()
+            
+        sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
+        sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
+        if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
+            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
+            self.print_contig_sequence()
+            scaf2.print_contig_sequence()
+            return
+        # This whole thing is not overly complicated but certainly tedious
+        # First the scaffold that's more to the left is worked on, this is easier as coordinates don't change much in this scaffold
+        lctg = sorted_same_ctgs1[0]
+        if self.left_coords[lctg] < scaf2.left_coords[lctg]: # smaller means there is less DNA to the left so the scaffold is more right than the other
+            lscaf = scaf2
+            rscaf = self
+        else:
+            lscaf = self
+            rscaf = scaf2
+        lsorted_ctgs= sorted(lscaf.contigset, key = lambda item: lscaf.left_coords[item])
+        rsorted_ctgs= sorted(rscaf.contigset, key = lambda item: rscaf.left_coords[item])
+
+        def get_ctg_len(self, ctg):
+            if ctg in self.left_coords and ctg in self.right_coords:
+                return self.right_coords[ctg] - self.left_coords[ctg]
+            else:
+                return -1
+
+        def has_similar_mapping_length(self, ctg1, scaf2, ctg2):
+            tolerance = 0.2
+            l1 = self.get_ctg_len(ctg1)
+            l2 = scaf2.get_ctg_len(ctg2)
+            if  l1 == -1:
+                return False
+            if l2 == -1:
+                return False
+            if l1 > l2:
+                if l1 > l2* (1+tolerance):
+                    return False
+                else:
+                    return True
+            else:
+                if l2 > l1* (1+tolerance):
+                    return False
+                else:
+                    return True
+
+            
+            
+        
+        # First the left coordinate in the LR of the right scaffold is needed
+        # therefore the left-most contig that has the same length (with tolerance) in the scaffolds is needed
+        
+        # If the right scaffold does not extend further right than the left scaffold
+        # we only check whether the contig coordinates are similar enough,
+        # and if any contigs or on one scaffold but not the other
+        if rsorted_ctgs[-1] in lsorted_ctgs:
 
 
 
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
-    def merge(self, scaf2):
+    def merge_contigcoords(self, scaf2):
         if "54QBL" in scaf2.contigset:
             print("ok?")
             print(scaf2.lr_info.keys())
@@ -220,7 +296,6 @@ class Scaffold:
             self.print_contig_sequence()
             scaf2.print_contig_sequence()
             return
-        
         # This whole thing is not overly complicated but certainly tedious
         # First the scaffold that's more to the left is worked on, this is easier as coordinates don't change much in this scaffold
         lctg = sorted_same_ctgs1[0]
@@ -230,7 +305,6 @@ class Scaffold:
         else:
             lscaf = self
             rscaf = scaf2
-
         lsorted_ctgs= sorted(lscaf.contigset, key = lambda item: lscaf.left_coords[item])
         rsorted_ctgs= sorted(rscaf.contigset, key = lambda item: rscaf.left_coords[item])
 
@@ -369,6 +443,8 @@ class Scaffold:
         newinst.right_coords_contig = dict()
         newinst.coords = [("","")]*lr[1]["length"]
         newinst.length = lr[1]["length"]
+        newinst.longread_coords = dict()
+        newinst.longread_coords[id(newinst)] = (1, lr[1]["length"])
         for part in lr[1]["maps"]:
             ctg = part["contig"]
             if ctg.endswith("QBL"):
