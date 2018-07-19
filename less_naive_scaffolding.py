@@ -141,15 +141,22 @@ class Scaffold:
             print(scstring1)
             print(scstring2)
 
+    # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
     def to_SVG(self, img, xoff, yoff):
-        ypad = 10
+        ypad = 7
         col = "black"
-
+        nr_longreads = len(self.longread_coords)
+        y_space_per_longread = 4
+        ypos = 0
         for lrid, lrc in self.longread_coords.items():
-            rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypad-8), ((lrc[1]-lrc[0])/100,8), stroke='black', stroke_width=1 ))
-            rect.fill(color="none").stroke("green").dasharray([2, 2])
-            img.add(dwg.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypad-9),fill="green", style="font-size:2"))
-        img.add(dwg.line((xoff, yoff+ypad), ( xoff + self.length/100, yoff+ypad), stroke=svgwrite.rgb(0, 0, 0, '%')))
+            ylen = nr_longreads * y_space_per_longread - ypos
+            rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
+            rect.fill(color="none").dasharray([2, 2])
+            img.add(dwg.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
+            ypos += y_space_per_longread
+        ypos += ypad
+            
+        img.add(dwg.line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
 
         above = True
         for ctg in sorted(self.contigset, key= lambda x: self.left_coords[x]):
@@ -160,19 +167,20 @@ class Scaffold:
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctgn = ctgn[0:9]
-            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypad-3), ((ec-sc)/100,6), stroke='black', stroke_width=1, fill = 'white'))
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='black', stroke_width=1, fill = 'white'))
             if above:
-                yt = yoff+ypad-4
+                yt = yoff+ypos-4
                 col = "blue" if col == "black" else "black"
             else:
-                yt = yoff+ypad+7
+                yt = yoff+ypos+7
             above = not above
             img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:4"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
                 direction = "<"
-            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypad+2),style="font-size:6"))
+            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
+        return ypos+5
 
 
     def merge(self,scaf2):
@@ -305,16 +313,17 @@ class Scaffold:
             #    last_common_ctg = ctg
             #else:
             #    last_common_ctg = "nope"
+        first_anchor = "nope"
         for ctg in rsorted_ctgs:
             if ctg in same_ctgs:
-                first_anchor = ctg
+                if first_anchor == "nope":
+                    first_anchor = ctg
                 if is_on_left_edge(rscaf, ctg):
                     offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
                 else:
                     offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
-                for lrid, lrc in rscaf.longread_coords.items():
-                    nlongread_coords[lrid] = (lrc[0] + offset , lrc[1] + offset)
-                break
+        for lrid, lrc in rscaf.longread_coords.items():
+            nlongread_coords[lrid] = (lrc[0] + offset , lrc[1] + offset)
         last_common_ctg = "nope"
         for ctg in rsorted_ctgs:
             norientation[ctg] = rscaf.orientation[ctg]
@@ -347,6 +356,8 @@ class Scaffold:
                 print("id not found: " + str(id(scaf2)))
                 print("for contig: " + str(ctg))
                 print(contig2scaffold[ctg])
+            if id(self) not in contig2scaffold[ctg]:
+                contig2scaffold[ctg].append(id(self))
         del(scaffolds[id(scaf2)])
                 
 
@@ -637,13 +648,14 @@ for idx,scaf in scaffolds.items():
 
 
 dwg = svgwrite.Drawing(args.SVG,size=(u'1700', u'4600'), profile='full')
-ypos = 10
-ypad = 5
+yp = 10
 xtext = 10
-xpad = 200
-dwg.add(dwg.text("1000 bases", insert=( xpad, ypos), fill='black', style="font-size:7"))
-dwg.add(dwg.line((xpad, ypos+ypad), ( xpad + 1000/100, ypos+ypad), stroke=svgwrite.rgb(0, 0, 0, '%')))
-ypos += 20
+xpad = 20
+dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+dwg.add(dwg.line((xpad, yp+2), ( xpad + 10000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad, yp+1), ( xpad , yp+3), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad + 10000/100, yp+1), ( xpad +10000/100, yp+3), stroke=svgwrite.rgb(0, 0, 0, '%')))
+yp += 20
 
 # cluster np-reads 
 print("scaffolding long reads ....")
@@ -656,18 +668,18 @@ while len(scaffolds)-olen_scaf != 0:
         if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
             scaf1 = scaffolds[contig2scaffold[contig][0]]
             scaf2 = scaffolds[contig2scaffold[contig][1]]
-            #ypos += 20
-            #dwg.add(dwg.text(id(scaf1), insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
-            #scaf1.to_SVG(dwg, xpad, ypos)
-            #ypos += 20
-            #dwg.add(dwg.text(id(scaf2), insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
-            #scaf2.to_SVG(dwg, xpad, ypos)
+            #yp += 20
+            #dwg.add(dwg.text(id(scaf1), insert=(xtext, yp+1), fill='black', style="font-size:7"))
+            #scaf1.to_SVG(dwg, xpad, yp)
+            #yp += 20
+            #dwg.add(dwg.text(id(scaf2), insert=(xtext, yp+1), fill='black', style="font-size:7"))
+            #scaf2.to_SVG(dwg, xpad, yp)
             #print(contig2scaffold[contig])
             scaf1.merge(scaf2)
-            #ypos += 20
-            #dwg.add(dwg.text(id(scaf1), insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
-            #scaf1.to_SVG(dwg, xpad, ypos)
-            #ypos += 20
+            #yp += 20
+            #dwg.add(dwg.text(id(scaf1), insert=(xtext, yp+1), fill='black', style="font-size:7"))
+            #scaf1.to_SVG(dwg, xpad, yp)
+            #yp += 20
             break
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
@@ -675,9 +687,8 @@ print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len
 # Draw all scaffolds
 for scaf in scaffolds.values():
     #print(scaf.orientation)
-    ypos += 20
-    dwg.add(dwg.text(id(scaf), insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
-    scaf.to_SVG(dwg, xpad, ypos)
+    #dwg.add(dwg.text(id(scaf), insert=(xtext, yp+2), fill='black', style="font-size:7"))
+    yp += scaf.to_SVG(dwg, xpad, yp) + 10
 
 dwg.save()
 
