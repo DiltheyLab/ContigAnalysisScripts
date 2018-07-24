@@ -15,7 +15,7 @@ parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
-parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
+parser.add_argument("--mindepth", help="Minimal depth", type=int, default=10)
 
 args = parser.parse_args()
 
@@ -181,6 +181,11 @@ class Scaffold:
                 direction = "<"
             img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
         return ypos+5
+
+    def add_short_read_contig(self, anchor, newctg, distance, orientation):
+        pass
+        
+        
 
 
     def merge(self,scaf2):
@@ -652,9 +657,11 @@ yp = 10
 xtext = 10
 xpad = 20
 dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-dwg.add(dwg.line((xpad, yp+2), ( xpad + 10000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad, yp+1), ( xpad , yp+3), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad + 10000/100, yp+1), ( xpad +10000/100, yp+3), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad, yp+4), ( xpad + 10000/100, yp+4), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad, yp+2), ( xpad , yp+6), stroke=svgwrite.rgb(0, 0, 0, '%')))
+for i in range(1,10):
+    dwg.add(dwg.line( (xpad + (10000/100)/10 * i, yp+3), (xpad + (10000/100)/10 * i, yp+5), stroke=svgwrite.rgb(0,0,0,'%')))
+dwg.add(dwg.line((xpad + 10000/100, yp+2), ( xpad +10000/100, yp+6), stroke=svgwrite.rgb(0, 0, 0, '%')))
 yp += 20
 
 # cluster np-reads 
@@ -683,11 +690,40 @@ while len(scaffolds)-olen_scaf != 0:
             break
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
+print("adding short reads ....")
+with open(args.summaryfile) as f:
+    for line in f:
+        sline = line.split()
+        ctg1 = sline[0].split("_")[0].strip("+").strip("-")
+        ctg2 = sline[0].split("_")[1].strip("+").strip("-")
+        if sline[1] == "NA":
+            continue
+        if int(sline[2]) < args.mindepth:
+            continue
+        #moddist = float(sline[1])
+        if ctg1 in contig2scaffold:
+            if ctg2 in contig2scaffold:
+                if contig2scaffold[ctg1] != contig2scaffold[ctg2]:
+                    pass # TODO implement short read merging
+                else
+                    pass
+            else:
+                scaf = scaffolds[contig2scaffold[ctg1]]
+                scaf.add_shortread_contig(ctg1, ctg2, )
+            #print("cluster of ctg1 (" + ctg1 + "): " + str(contig2cluster[ctg1]))
+        elif ctg2 in contig2cluster:
+            addcontig(ctg1, contig2cluster[ctg2])
+        else:
+            clusternr += 1
+            #print("new cluster: " + str(clusternr))
+            scaffolds[clusternr] = set([ctg1, ctg2])
+            contig2cluster[ctg1] = clusternr
+            contig2cluster[ctg2] = clusternr
+            contigs.pop(ctg1, None)
+            contigs.pop(ctg2, None)
 
 # Draw all scaffolds
 for scaf in scaffolds.values():
-    #print(scaf.orientation)
-    #dwg.add(dwg.text(id(scaf), insert=(xtext, yp+2), fill='black', style="font-size:7"))
     yp += scaf.to_SVG(dwg, xpad, yp) + 10
 
 dwg.save()
