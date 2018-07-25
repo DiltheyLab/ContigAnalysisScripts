@@ -25,6 +25,49 @@ contigs = {}
 contig2scaffold = {}
 
 
+srneighs = dict()
+
+def get_other_relpos(relpos):
+    if relpos == "left":
+        return "right"
+    return "left"
+
+def add_neighs(ctg1, ctg2, relpos, dist):
+    if ctg1 in srneighs:
+        if ctg2 not in [x[0] for x in srneighs[ctg1][relpos]]:
+            srneighs[ctg1][relpos].append((ctg2,dist))
+        if ctg2 in [x[0] for x in srneighs[ctg1][get_other_relpos(relpos)]]:
+            print("Conflict for " + ctg1 + " and " + ctg2)
+            print(srneighs[ctg1])
+    else:
+        srneighs[ctg1] = {"left": [], "right": []}
+        srneighs[ctg1][relpos] = [(ctg2, dist)]
+
+with open(args.summaryfile) as f:
+    for line in f:
+        sline = line.split()
+        if sline[1] == "NA":
+            continue
+        if int(sline[2]) < args.mindepth:
+            continue
+        ctg1 = sline[0].split("_")[0].strip("+").strip("-")
+        ctg2 = sline[0].split("_")[1].strip("+").strip("-")
+        ori1 = sline[0].split("_")[0][0]
+        ori2 = sline[0].split("_")[1][0]
+        distance = float(sline[1])
+        dist = int(distance)
+        if distance < 1000 and distance > -200:
+            if ori1 == ori2:
+                if ori1 == "+":
+                    add_neighs(ctg1,ctg2,"right",dist)
+                    #add_neighs(ctg2,ctg1,"left",dist)
+                else:
+                    add_neighs(ctg2,ctg1,"right",dist)
+                    #add_neighs(ctg1,ctg2,"left",dist)
+   
+
+
+        
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
@@ -39,6 +82,7 @@ class Scaffold:
     right_coords = dict()
     orientation = dict()
     contigset = set()
+    contigset_sr = set()
     length = 0
     sequence = ""
     nr_of_scaffolds = 0
@@ -53,11 +97,10 @@ class Scaffold:
     def __init__(self):
         Scaffold.nr_of_scaffolds += 1
         self.contigset = set()
+        self.contigset_sr = set()
         #self.turned_around = False
         #lr_info[lr[0]] = lr[1]
 
-    def add_sr_info(self, sr):
-        pass
     
 
     def print_contigset(self):
@@ -80,15 +123,6 @@ class Scaffold:
         
     def print_id(self):
         print(self.idx)
-
-    def del_lr_info(self, lrid):
-        pass
-        # can be complicated
-        # probably it's easiest to create a new object
-        # with all the reads except for the specified lrid
-
-    def del_sr_info(self, srid):
-        pass
 
     # this signifies a hard turnaround
     # i.e. the coordinate system of the scaffold is reversed
@@ -180,13 +214,39 @@ class Scaffold:
             else:
                 direction = "<"
             img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
+        for ctg in sorted(self.contigset_sr, key= lambda x: self.left_coords[x]):
+            #print(read)
+            sc = self.left_coords[ctg]
+            ec = self.right_coords[ctg]
+            ctgn = ctg.rstrip("QBL")
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='grey', stroke_width=1, fill = 'white'))
+            col = "gray"
+            if above:
+                yt = yoff+ypos-4
+            else:
+                yt = yoff+ypos+7
+            above = not above
+            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:4"))
+            if self.orientation[ctg] == 0:
+                direction = ">"
+            else:
+                direction = "<"
+            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
         return ypos+5
 
     def add_short_read_contig(self, anchor, newctg, distance, orientation):
-        pass
-        
-        
-
+        try:
+            assert(newctg not in self.contigset)
+        except AssertionError:
+            print("New contig " + str(newctg) + " already exists in " + str(id(self)))
+        if distance < 0:
+            self.left_coords[newctg] = self.right_coords[anchor]
+            self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg] + distance
+        else:
+            self.left_coords[newctg] = self.right_coords[anchor] + distance
+            self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg]
+        self.orientation[newctg] = orientation
+        self.contigset_sr.add(newctg)
 
     def merge(self,scaf2):
         for rid, read in scaf2.lr_info.items():
@@ -682,7 +742,9 @@ while len(scaffolds)-olen_scaf != 0:
             #dwg.add(dwg.text(id(scaf2), insert=(xtext, yp+1), fill='black', style="font-size:7"))
             #scaf2.to_SVG(dwg, xpad, yp)
             #print(contig2scaffold[contig])
+
             scaf1.merge(scaf2)
+
             #yp += 20
             #dwg.add(dwg.text(id(scaf1), insert=(xtext, yp+1), fill='black', style="font-size:7"))
             #scaf1.to_SVG(dwg, xpad, yp)
@@ -691,36 +753,18 @@ while len(scaffolds)-olen_scaf != 0:
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 print("adding short reads ....")
-with open(args.summaryfile) as f:
-    for line in f:
-        sline = line.split()
-        ctg1 = sline[0].split("_")[0].strip("+").strip("-")
-        ctg2 = sline[0].split("_")[1].strip("+").strip("-")
-        if sline[1] == "NA":
-            continue
-        if int(sline[2]) < args.mindepth:
-            continue
-        #moddist = float(sline[1])
+for ctg1 in srneighs:
+    for ctg2,dist in srneighs[ctg1]["right"]:
         if ctg1 in contig2scaffold:
             if ctg2 in contig2scaffold:
                 if contig2scaffold[ctg1] != contig2scaffold[ctg2]:
                     pass # TODO implement short read merging
-                else
+                else:
                     pass
             else:
-                scaf = scaffolds[contig2scaffold[ctg1]]
-                scaf.add_shortread_contig(ctg1, ctg2, )
+                scaf = scaffolds[contig2scaffold[ctg1][0]]
+                scaf.add_short_read_contig(ctg1, ctg2, dist, 0)
             #print("cluster of ctg1 (" + ctg1 + "): " + str(contig2cluster[ctg1]))
-        elif ctg2 in contig2cluster:
-            addcontig(ctg1, contig2cluster[ctg2])
-        else:
-            clusternr += 1
-            #print("new cluster: " + str(clusternr))
-            scaffolds[clusternr] = set([ctg1, ctg2])
-            contig2cluster[ctg1] = clusternr
-            contig2cluster[ctg2] = clusternr
-            contigs.pop(ctg1, None)
-            contigs.pop(ctg2, None)
 
 # Draw all scaffolds
 for scaf in scaffolds.values():
