@@ -161,7 +161,8 @@ print("Nr. of scaffolds: " + str(len(scaffolds)+len(contigs)) + " (" + str(len(s
 #print(contigs)
 for scaf in scaffolds:
     print(scaffolds[scaf])
-    sys.exit(0)
+    print("-"*200)
+
 def get_rightmost_contig(scaf_id):
     print(creads[scaf_id])
     if len(creads[scaf_id]) > 1:
