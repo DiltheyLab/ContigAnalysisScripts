@@ -11,8 +11,10 @@ import svgwrite
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
-parser.add_argument("summaryfile", help="Contig Distance Summary file")
+parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
+parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
+parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=10)
@@ -43,27 +45,28 @@ def add_neighs(ctg1, ctg2, relpos, dist):
         srneighs[ctg1] = {"left": [], "right": []}
         srneighs[ctg1][relpos] = [(ctg2, dist)]
 
-with open(args.summaryfile) as f:
-    for line in f:
-        sline = line.split()
-        if sline[1] == "NA":
-            continue
-        if int(sline[2]) < args.mindepth:
-            continue
-        ctg1 = sline[0].split("_")[0].strip("+").strip("-")
-        ctg2 = sline[0].split("_")[1].strip("+").strip("-")
-        ori1 = sline[0].split("_")[0][0]
-        ori2 = sline[0].split("_")[1][0]
-        distance = float(sline[1])
-        dist = int(distance)
-        if distance < 1000 and distance > -200:
-            if ori1 == ori2:
-                if ori1 == "+":
-                    add_neighs(ctg1,ctg2,"right",dist)
-                    #add_neighs(ctg2,ctg1,"left",dist)
-                else:
-                    add_neighs(ctg2,ctg1,"right",dist)
-                    #add_neighs(ctg1,ctg2,"left",dist)
+if args.summaryfile:
+    with open(args.summaryfile) as f:
+        for line in f:
+            sline = line.split()
+            if sline[1] == "NA":
+                continue
+            if int(sline[2]) < args.mindepth:
+                continue
+            ctg1 = sline[0].split("_")[0].strip("+").strip("-")
+            ctg2 = sline[0].split("_")[1].strip("+").strip("-")
+            ori1 = sline[0].split("_")[0][0]
+            ori2 = sline[0].split("_")[1][0]
+            distance = float(sline[1])
+            dist = int(distance)
+            if distance < 1000 and distance > -200:
+                if ori1 == ori2:
+                    if ori1 == "+":
+                        add_neighs(ctg1,ctg2,"right",dist)
+                        add_neighs(ctg2,ctg1,"left",dist)
+                    else:
+                        add_neighs(ctg2,ctg1,"right",dist)
+                        #add_neighs(ctg1,ctg2,"left",dist)
    
 
 for read in SeqIO.parse(args.contigfile, "fasta"):
@@ -102,7 +105,7 @@ class Scaffold:
     
 
     def print_contigset(self):
-        sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip("QBL")))
+        sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip(args.linename)))
         for contig in sortedcontigs:
             print(contig)
         
@@ -201,10 +204,12 @@ class Scaffold:
             #print(read)
             sc = self.left_coords[ctg]
             ec = self.right_coords[ctg]
-            ctgn = ctg.rstrip("QBL")
+            ctgn = ctg.rstrip(args.linename)
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctgn = ctgn[0:9]
+            else:
+                ctgn = "$" + ctgn + "q"
             img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='black', stroke_width=1, fill = 'white'))
             if above:
                 yt = yoff+ypos-4
@@ -222,7 +227,8 @@ class Scaffold:
             #print(read)
             sc = self.left_coords[ctg]
             ec = self.right_coords[ctg]
-            ctgn = ctg.rstrip("QBL")
+            ctgn = ctg.rstrip(args.linename)
+            ctgn = "$" + ctgn + "q"
             img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='grey', stroke_width=1, fill = 'white'))
             col = "gray"
             if above:
@@ -704,7 +710,7 @@ class Scaffold:
         newinst.longread_coords[lr[0]] = [1, lr[1]["length"]]
         for part in lr[1]["maps"]:
             ctg = part["contig"]
-            if ctg.endswith("QBL"):
+            if ctg.endswith(args.linename):
                 newinst.contigset.add(ctg)
                 if ctg in contigs:
                     del(contigs[ctg])
@@ -712,7 +718,7 @@ class Scaffold:
             try: 
                 assert(not ctg in newinst.left_coords)
             except AssertionError:
-                if ctg.endswith("QBL"):
+                if ctg.endswith(args.linename):
                     print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
                     continue
             newinst.left_coords[ctg] = part["scr"]
@@ -722,7 +728,7 @@ class Scaffold:
             newinst.coords[part["scr"]-1] = ("start",ctg)
             newinst.coords[part["ecr"]-1] = ("end",ctg)
             # checking whether the contig is already part of another scaffold happens elsewhere
-            if ctg.endswith("QBL"):
+            if ctg.endswith(args.linename):
                 #try:
                 #    assert(not ctg in contig2scaffold)
                 #except AssertionError:
@@ -775,9 +781,9 @@ greadst = {}
 for rid in reads:
     counter = 0
     for item in reads[rid]["maps"]:
-        if item["contig"].endswith("QBL") and item["contig"] != "1036QBL":
+        if item["contig"].endswith(args.linename) and item["contig"] != "1036QBL":
             counter +=1
-            if counter == 2:
+            if counter >= args.mincontigs:
                 greadst[rid] = reads[rid]
                 break
 
@@ -806,9 +812,10 @@ rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='green', s
 rect.fill(color="none").dasharray([2, 2])
 dwg.add(dwg.text("region of scaffold covered by long read", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
 yp += 10
-dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='gray', stroke_width=1, fill='none' ))
-dwg.add(dwg.text("contigs from short read data", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
-yp += 10
+if args.summaryfile:
+    dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='gray', stroke_width=1, fill='none' ))
+    dwg.add(dwg.text("contigs from short read data", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
+    yp += 10
 dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='black', stroke_width=1, fill='none' ))
 dwg.add(dwg.text("contigs from long read data", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
 yp += 20
@@ -853,25 +860,36 @@ def is_leftmost(ctg):
         return True
     return False
 
-print("adding short reads ....")
-somethingHappened = True
-while somethingHappened:
-    somethingHappened = False
-    for ctg1 in srneighs:
-        if ctg1 in contig2scaffold and is_rightmost(ctg1):
-            scaf1 = scaffolds[contig2scaffold[ctg1][0]]
-            for ctg2 in srneighs[ctg1]["right"]:
-                if ctg2[0] in contig2scaffold and is_leftmost(ctg2[0]):
-                    scaf2 = scaffolds[contig2scaffold[ctg2[0]][0]]
-                    scaf1.merge_sr(ctg1,ctg2[0],ctg2[1])
-                    somethingHappened = True
-                elif ctg2[0] in contig2scaffold:
-                    pass
-                    #print("Problem merging")
-                else:
-                    scaf1.add_short_read_contig_right(ctg1,ctg2[0],ctg2[1], 0)
-                    del(contigs[ctg2[0]])
-                    somethingHappened = True
+if args.summaryfile:
+    print("adding short reads ....")
+    somethingHappened = True
+    while somethingHappened:
+        somethingHappened = False
+        for ctg1 in srneighs:
+            if ctg1 in contig2scaffold and is_rightmost(ctg1):
+                scaf1 = scaffolds[contig2scaffold[ctg1][0]]
+                for ctg2 in srneighs[ctg1]["right"]:
+                    if ctg2[0] in contig2scaffold and is_leftmost(ctg2[0]):
+                        scaf2 = scaffolds[contig2scaffold[ctg2[0]][0]]
+                        scaf1.merge_sr(ctg1,ctg2[0],ctg2[1])
+                        somethingHappened = True
+                    elif ctg2[0] in contig2scaffold:
+                        pass
+                        #print("Problem merging")
+                    else:
+                        scaf1.add_short_read_contig_right(ctg1,ctg2[0],ctg2[1], 0)
+                        del(contigs[ctg2[0]])
+                        somethingHappened = True
+        for ctg1 in srneighs:
+            if ctg1 in contig2scaffold and is_leftmost(ctg1):
+                scaf1 = scaffolds[contig2scaffold[ctg1][0]]
+                for ctg2 in srneighs[ctg1]["left"]:
+                    if ctg2[0] in contig2scaffold: 
+                        pass
+                    else:
+                        scaf1.add_short_read_contig_left(ctg1,ctg2[0],ctg2[1], 0)
+                        del(contigs[ctg2[0]])
+                        somethingHappened = True
 
         
 
