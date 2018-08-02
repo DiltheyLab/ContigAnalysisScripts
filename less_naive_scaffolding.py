@@ -17,7 +17,7 @@ parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
-parser.add_argument("--mindepth", help="Minimal depth", type=int, default=10)
+parser.add_argument("--mindepth", help="Minimal depth", type=int, default=25)
 
 args = parser.parse_args()
 
@@ -66,7 +66,15 @@ if args.summaryfile:
                         add_neighs(ctg2,ctg1,"left",dist)
                     else:
                         add_neighs(ctg2,ctg1,"right",dist)
-                        #add_neighs(ctg1,ctg2,"left",dist)
+                        add_neighs(ctg1,ctg2,"left",dist)
+                else: # some contigs are defined in wrong orientation
+                      # we still want to handle these
+                    if ori1 =="+": # so ori2 == "-"  |ctg1 >| |< ctg2|
+                        add_neighs(ctg1,ctg2,"right",dist)
+                        add_neighs(ctg2,ctg1,"right",dist)
+                    else: # |ctg1 <| |> ctg2|
+                        add_neighs(ctg1,ctg2,"left",dist)
+                        add_neighs(ctg2,ctg1,"left",dist)
    
 
 for read in SeqIO.parse(args.contigfile, "fasta"):
@@ -849,6 +857,10 @@ while len(scaffolds)-olen_scaf != 0:
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 def is_rightmost(ctg):
+    try:
+        assert(len(contig2scaffold[ctg]) == 1)
+    except AssertionError:
+        print("More than one scaffold for contig " + ctg1)
     scaf = scaffolds[contig2scaffold[ctg][0]]
     if ctg == scaf.get_rightmost_contig():
         return True
