@@ -24,6 +24,7 @@ args = parser.parse_args()
 reads = {}
 greads = {}
 contigs = {}
+allcontigs = {}
 contig2scaffold = {}
 
 
@@ -76,9 +77,14 @@ if args.summaryfile:
                         add_neighs(ctg1,ctg2,"left",dist)
                         add_neighs(ctg2,ctg1,"left",dist)
    
-
+ctgpos = {}
+pos = 0
 for read in SeqIO.parse(args.contigfile, "fasta"):
+    pos += 1
     contigs[read.id] = len(read.seq)
+    allcontigs[read.id] = len(read.seq)
+    ctgpos[read.id] = pos
+    
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
@@ -111,6 +117,14 @@ class Scaffold:
         #lr_info[lr[0]] = lr[1]
 
     
+    def delete(self):
+        for ctg in self.contigset:
+            contig2scaffold[ctg].remove(id(self))
+            if contig2scaffold[ctg] == []:
+                del(contig2scaffold[ctg])
+            if not ctg in contigs:
+                contigs[ctg] = allcontigs[ctg]
+        del(scaffolds[self.idx])
 
     def print_contigset(self):
         sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip(args.linename)))
@@ -186,9 +200,20 @@ class Scaffold:
         scstring1 = "-".join(sortedcontigs)
         scstring2 = "-".join(sortedcontigs2)
         if scstring1 != scstring2:
-            print("Conflict!")
+            print("Conflict! Removing scaffold.")
             print(scstring1)
             print(scstring2)
+            return True
+        for ctg1,ctg2 in zip(sortedcontigs[:-1],sortedcontigs[1:]):
+            if ctgpos[ctg1] > ctgpos[ctg2]:
+                print("Contigs ordered badly. Removing scaffold.")
+                print(ctg1)
+                print(ctg2)
+                return True
+            if ctgpos[ctg2] - ctgpos[ctg1] > 2:
+                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart. Removing scaffold.")
+                return True
+        return False
 
     # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
     def to_SVG(self, img, xoff, yoff):
@@ -292,7 +317,7 @@ class Scaffold:
             print("New contig " + str(newctg) + " already exists in " + str(id(self)))
         if distance < 0:
             self.left_coords[newctg] = self.right_coords[anchor]
-            self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg] + distance
+            self.right_coords[newctg] = self.left_coords[newctg] + allcontigs[newctg] + distance
         else:
             self.left_coords[newctg] = self.right_coords[anchor] + distance
             self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg]
@@ -475,10 +500,10 @@ class Scaffold:
             if ctg in same_ctgs:
                 if first_anchor == "nope":
                     first_anchor = ctg
-                if rscaf.is_on_left_edge(ctg):
-                    offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
-                else:
-                    offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
+                    if rscaf.is_on_left_edge(ctg):
+                        offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
+                    else:
+                        offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
         for lrid, lrc in rscaf.longread_coords.items():
             nlongread_coords[lrid] = [lrc[0] + offset , lrc[1] + offset]
         last_common_ctg = "nope"
@@ -799,8 +824,16 @@ for rid in greadst:
     nscaff = Scaffold.init_from_LR((rid,reads[rid]))
     scaffolds[id(nscaff)] = nscaff
 
+
+toRemove = set()
 for idx,scaf in scaffolds.items():
-    scaf.find_conflicts()
+    #find and get rid of conflicting scaffolds
+    if scaf.find_conflicts():
+        toRemove.add(idx)
+    
+for idx in toRemove:
+    scaffolds[idx].delete()
+    
 
 
 
