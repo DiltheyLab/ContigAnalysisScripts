@@ -89,6 +89,7 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 print("Nr. of scaffolds: " + str(len(contigs)))
 
 class Scaffold:
+    scaf_info = []
     sr_info = dict()
     lr_info = dict()
     longread_coords = dict()
@@ -103,6 +104,7 @@ class Scaffold:
     nr_of_scaffolds = 0
     turned_around = False
     idx = ""
+    get_sequence_fragments = []
     #id = 
     # All contigs will have scaffold coordinates.
     # Before scaffolds are merged all scaffold coordinates 
@@ -130,16 +132,15 @@ class Scaffold:
         sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip(args.linename)))
         for contig in sortedcontigs:
             print(contig)
-        
-    def print_coords(self):
-        coordstr = ""
-        for pos in self.coords:
-            if pos == ("",""):
-                coordstr += "."
-            else:
-                coordstr += "|"
-        print(coordstr)
 
+    def print_coords(self):
+        ostr = []
+        for coord in self.coords:
+            if coord != ("","",""):
+                ostr.append(str(coord))
+        print(" ".join(ostr))
+        #print(self.coords)
+        
     def print_contig_sequence(self):
         sortedcontigs = sorted(self.contigset, key = lambda item: self.left_coords[item])
         print("-".join(sortedcontigs))
@@ -150,14 +151,11 @@ class Scaffold:
     # this signifies a hard turnaround
     # i.e. the coordinate system of the scaffold is reversed
     def turn_around(self):
-        #self.turned_around = not self.turned_around
-        #print("Turned " + str(id(self)) + " around.")
+        self.turned_around = True
         new_left_coords = dict()
         new_right_coords = dict()
         new_orientation = dict()
-        #if "54QBL" in self.contigset:
-        #    print(self.left_coords)
-        #    print(self.right_coords)
+        
         for contig in self.contigset:
             new_right_coords[contig] = self.length - self.left_coords[contig] 
             new_left_coords[contig] = self.length - self.right_coords[contig] 
@@ -165,9 +163,7 @@ class Scaffold:
         self.left_coords = new_left_coords
         self.right_coords = new_right_coords
         self.orientation = new_orientation
-        #if "54QBL" in self.contigset:
-        #    print(self.left_coords)
-        #    print(self.right_coords)
+        self.coords.reverse()
 
     def is_left_of(self,ctg1, ctg2):
         if self.left_coords(ctg1) < self.left_coords(ctg2):
@@ -200,18 +196,15 @@ class Scaffold:
         scstring1 = "-".join(sortedcontigs)
         scstring2 = "-".join(sortedcontigs2)
         if scstring1 != scstring2:
-            print("Conflict! Removing scaffold.")
-            print(scstring1)
-            print(scstring2)
+            print("Conflict! " + scstring1 + " " + scstring2 + " . Removing scaffold.")
             return True
         for ctg1,ctg2 in zip(sortedcontigs[:-1],sortedcontigs[1:]):
             if ctgpos[ctg1] > ctgpos[ctg2]:
-                print("Contigs ordered badly. Removing scaffold.")
-                print(ctg1)
-                print(ctg2)
+                print("Contigs " + ctg1 + " and " + ctg2 + " ordered badly. Removing scaffold.")
                 return True
-            if ctgpos[ctg2] - ctgpos[ctg1] > 2:
-                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart. Removing scaffold.")
+            dist = ctgpos[ctg2] - ctgpos[ctg1]
+            if dist > 4:
+                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart(" + str(dist) + "). Removing scaffold.")
                 return True
         return False
 
@@ -548,17 +541,6 @@ class Scaffold:
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
     def merge_contigcoords(self, scaf2):
-        #if "54QBL" in scaf2.contigset:
-        #    print("ok?")
-        #    print(scaf2.lr_info.keys())
-        #    print(scaf2.left_coords)
-        #    print(scaf2.right_coords)
-        #if "54QBL" in self.contigset:
-        #    print("hwhat?")
-        #    print(self.lr_info.keys())
-        #    print(self.left_coords)
-        #    print(self.right_coords)
-        #print("merging " + str(id(self)) + " and " + str(id(scaf2)))
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
@@ -631,15 +613,6 @@ class Scaffold:
                 nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg] - delta_left_coord_contig
                 nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg] + delta_right_coord_contig
                 offset += delta_left_coord_contig + delta_right_coord_contig
-                #if "54QBL" in self.contigset:
-                #    print("nleft_coords:" + str(nleft_coords))
-                #    print("offset:" + str(offset))
-                #    print("dlcc: " + str(delta_left_coord_contig))
-                #    print("drcc: " + str(delta_right_coord_contig))
-                #    print("llcc: " + str(lscaf.left_coords_contig[ctg]))
-                #    print("lrcc: " + str(lscaf.right_coords_contig[ctg]))
-                #    print("rlcc: " + str(rscaf.left_coords_contig[ctg]))
-                #    print("rrcc: " + str(rscaf.right_coords_contig[ctg]))
 
         # For the right scaffold these helper functions are needed
         def get_anchors(scaf1, current_ctg):
@@ -723,11 +696,68 @@ class Scaffold:
         for ctg in scaf2.contigset:
             contig2scaffold[ctg].remove(id(scaf2))
         del(scaffolds[id(scaf2)])
+
+    # Do not use this!
+    # Extracting the sequence is difficult because the sequence data may not be available to you locally.
+    # You should write your own method for this. This is my own special case that's why this method has _th as suffix
+    # All these paths are hardcoded because the raw data probably won't move around much. 
+    def get_sequence_th(self):
+        actions = []
+        status = "in_lr"
+        last_change_pos = 1
+        ctgnr = 0
+        for pos in range(0,self.length):
+            rpos = pos + 1
+            if self.coords[pos] != ("","",""):
+                (kind, ctg, ctgcoords) = self.coords[pos]
+                if kind == "start" and status == "in_lr":
+                    status = "in_ctg"
+                    last_change_pos = rpos
+                    ctgstart = ctgcoords
+                elif kind == "end" and status == "in_ctg":
+                    status = "in_lr"
+                    last_change_pos = rpos
+                    action = [ctg,ctgstart,ctgcoords]
+                    actions.append(action)
+                elif kind == "end-start" and status == "in_ctg":
+                    ctg1, ctg2 = ctg.split(",")
+                    ctgcoord1, ctgcoord2 = ctgcoords.split(",")
+                    last_change_pos = rpos
+                    action = [ctg1,ctgstart,ctgcoord1]
+                    actions.append(action)
+                    ctgstart = ctgcoord2
+                elif kind == "start" and status == "in_ctg":
+                    status = "overlap"
+                    overlap_ctg = ctg
+                    overlap_coord = ctgcoords
+                    overlap_pos = rpos
+                elif kind == "end" and status == "overlap":
+                    action = [ctg,ctgstart,ctgcoords]
+                    actions.append(action)
+                    ctgstart = overlap_coord + rpos - overlap_pos
+                    status = "in_ctg"
+                elif kind == "end" and status == "in_lr":
+                    ctgstart = ctgcoords
+                    status = "in_ctg_rev"
+                elif kind == "start" and status == "in_ctg_rev":
+                    action = [ctg,ctgcoords,ctgstart,"reverse-complementary"]
+                    actions.append(action)
+                    status = "in_lr"
+                else:
+                    print("Status \"" + status + "\" and kind \"" + kind + "\" not implemented yet.")
+                    print(self.lr_info)
+                    self.print_coords()
+        print(actions)
         
+                
+
     
     @classmethod
     def init_from_LR(cls,lr):
         newinst = cls()
+        newinst.turned_around = False
+        newinst.get_sequence_fragments = []
+        newinst.scaf_info = []
         newinst.lr_info = dict()
         newinst.lr_info[lr[0]] = lr[1]
         orientation0 = 0
@@ -737,7 +767,7 @@ class Scaffold:
         newinst.left_coords_contig = dict()
         newinst.right_coords = dict()
         newinst.right_coords_contig = dict()
-        newinst.coords = [("","")]*lr[1]["length"]
+        newinst.coords = [("","","")]*(lr[1]["length"]+1)
         newinst.length = lr[1]["length"]
         newinst.longread_coords = dict()
         newinst.longread_coords[lr[0]] = [1, lr[1]["length"]]
@@ -755,11 +785,47 @@ class Scaffold:
                     print("Contig " + ctg + " already exists in left_corrds. Probably the contig is in read " + str(lr[0]) + " more than once.")
                     continue
             newinst.left_coords[ctg] = part["scr"]
-            newinst.left_coords_contig[ctg] = part["scc"]
             newinst.right_coords[ctg] = part["ecr"]
-            newinst.right_coords_contig[ctg] = part["ecc"]
-            newinst.coords[part["scr"]-1] = ("start",ctg)
-            newinst.coords[part["ecr"]-1] = ("end",ctg)
+            newinst.orientation[ctg] = part["strand"]
+
+            if ctg.startswith("chr"):
+                continue
+
+            if part["strand"] == 1: 
+                # workaround for misleading coordinates in erates file
+                newinst.left_coords_contig[ctg] = part["lenc"] - part["ecc"]
+                newinst.right_coords_contig[ctg] = part["lenc"] - part["scc"]
+                startcr = part["ecr"]
+                endcr = part["scr"]
+            else:
+                newinst.left_coords_contig[ctg] = part["scc"]
+                newinst.right_coords_contig[ctg] = part["ecc"]
+                startcr = part["scr"]
+                endcr = part["ecr"]
+
+            if newinst.coords[startcr] != ("","",""):
+                if newinst.coords[startcr][0] == "start":
+                    print("Problem with coordinates, start")
+                elif newinst.coords[startcr][0] == "end":
+                    ctgstring = newinst.coords[startcr][1] + "," + ctg
+                    ctgcoords = str(newinst.coords[startcr][2]) + "," + str(newinst.right_coords_contig[ctg])
+                    newinst.coords[startcr] = ("end-start", ctgstring,ctgcoords)
+                else:
+                    print("Problem with coordinates, end-start")
+            else:
+                newinst.coords[startcr] = ("start",ctg,newinst.left_coords_contig[ctg])
+            
+            if newinst.coords[endcr] != ("","",""):
+                if newinst.coords[endcr][0] == "start":
+                    ctgstring = ctg + "," + newinst.coords[endcr][1]
+                    ctgcoords = str(newinst.right_coords_contig[ctg]) + "," + str(newinst.coords[endcr][2])
+                    newinst.coords[endcr] = ("end-start", ctgstring, ctgcoords)
+                elif newinst.coords[endcr][0] == "end":
+                    print("Problem with coordinates, end")
+                else:
+                    print("Problem with coordinates, end-start")
+            else:
+                newinst.coords[endcr] = ("end",ctg, newinst.right_coords_contig[ctg])
             # checking whether the contig is already part of another scaffold happens elsewhere
             if ctg.endswith(args.linename):
                 #try:
@@ -783,8 +849,11 @@ class Scaffold:
         if orientation0 < orientation1:
             newinst.turn_around()    
         
+        
         newinst.idx = id(newinst)
         return newinst
+    
+    #add_seq_info(self):
 
 # nanopore read info
 with open(args.efile) as f:
@@ -822,6 +891,8 @@ for rid in reads:
 
 for rid in greadst:
     nscaff = Scaffold.init_from_LR((rid,reads[rid]))
+    nscaff.get_sequence_th()
+    #nscaff.add_seq_info()
     scaffolds[id(nscaff)] = nscaff
 
 
@@ -872,20 +943,7 @@ while len(scaffolds)-olen_scaf != 0:
         if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
             scaf1 = scaffolds[contig2scaffold[contig][0]]
             scaf2 = scaffolds[contig2scaffold[contig][1]]
-            #yp += 20
-            #dwg.add(dwg.text(id(scaf1), insert=(xtext, yp+1), fill='black', style="font-size:7"))
-            #scaf1.to_SVG(dwg, xpad, yp)
-            #yp += 20
-            #dwg.add(dwg.text(id(scaf2), insert=(xtext, yp+1), fill='black', style="font-size:7"))
-            #scaf2.to_SVG(dwg, xpad, yp)
-            #print(contig2scaffold[contig])
-
             scaf1.merge(scaf2)
-
-            #yp += 20
-            #dwg.add(dwg.text(id(scaf1), insert=(xtext, yp+1), fill='black', style="font-size:7"))
-            #scaf1.to_SVG(dwg, xpad, yp)
-            #yp += 20
             break
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
@@ -946,4 +1004,3 @@ dwg.save()
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 sys.exit(0)
-
