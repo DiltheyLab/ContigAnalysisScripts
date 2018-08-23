@@ -6,6 +6,7 @@ import sys
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
+parser.add_argument("cellline", help="Name of the cellline")
 
 args = parser.parse_args()
 
@@ -23,23 +24,48 @@ with open(args.efile) as f:
         strand = sline[8]
         sc = int(sline[5])
         ec = int(sline[6])
+        sc_c = int(sline[9])
+        ec_c = int(sline[10])
+        c_l = int(sline[11])
         if rid in reads:
-            reads[rid]["overlaps"].append([ctg,strand,sc,ec])
+            reads[rid]["overlaps"].append([ctg,strand,sc,ec,sc_c,ec_c,c_l])
         else:
             reads[rid] = {}
             reads[rid]["length"] = int(sline[7])
-            reads[rid]["overlaps"] = [[ctg,strand,sc,ec]]
+            reads[rid]["overlaps"] = [[ctg,strand,sc,ec,sc_c,ec_c,c_l]]
 
 # get interesting reads
 greadst = {}
+intreads = {}
+greads_contigset = set()
+intreads_contigset = set()
+
 for rid in reads:
     counter = 0
     for item in reads[rid]["overlaps"]:
-        if item[0].endswith("QBL"):
+        if item[0].endswith(args.cellline):
             counter += 1
     if counter >= 2:
         greadst[rid] = reads[rid]
+        for item in reads[rid]["overlaps"]:
+            if item[0].endswith(args.cellline):
+                greads_contigset.add(item[0])
+    if counter == 1:
+        intreads[rid] = reads[rid]
+        for item in reads[rid]["overlaps"]:
+            if item[0].endswith(args.cellline):
+                intreads_contigset.add(item[0])
             
+intersection = greads_contigset.intersection(intreads_contigset)
+sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.cellline)))
+print(sintersection)
+
+
+for rid in intreads:
+    if len(intreads[rid]["overlaps"]) == 1:
+        print("\t".join([rid, str(intreads[rid])]))
+        
+
 # sort contigs by left coordinate
 for rid in greadst:
     #print(reads[rid]["overlaps"])
@@ -107,7 +133,7 @@ for cluster in creads:
             #print(read)
             sc = read[2]
             ec = read[3]
-            ctg = read[0].rstrip("QBL")
+            ctg = read[0].rstrip(args.cellline)
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctg = ctg[0:8]
