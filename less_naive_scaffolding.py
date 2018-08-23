@@ -13,6 +13,7 @@ parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
+parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
@@ -46,6 +47,7 @@ def add_neighs(ctg1, ctg2, relpos, dist):
         srneighs[ctg1] = {"left": [], "right": []}
         srneighs[ctg1][relpos] = [(ctg2, dist)]
 
+
 if args.summaryfile:
     with open(args.summaryfile) as f:
         for line in f:
@@ -76,6 +78,15 @@ if args.summaryfile:
                     else: # |ctg1 <| |> ctg2|
                         add_neighs(ctg1,ctg2,"left",dist)
                         add_neighs(ctg2,ctg1,"left",dist)
+
+blacklist = {}
+if args.blacklistfile:
+    with open(args.blacklistfile) as f:
+        for line in f:
+            sline = line.split()
+            blacklist[sline[0]] = sline[1]
+
+print(blacklist)
    
 ctgpos = {}
 pos = 0
@@ -132,6 +143,9 @@ class Scaffold:
         sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip(args.linename)))
         for contig in sortedcontigs:
             print(contig)
+
+    def print_lrids(self):
+        print(self.lr_info.keys())
 
     def print_coords(self):
         ostr = []
@@ -387,8 +401,8 @@ class Scaffold:
                 same_orientation += 1
         if different_orientation > 0 and same_orientation > 0 :
             print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are oriented differently in the two scaffolds.")
-            print(self.lr_info)
-            print(scaf2.lr_info)
+            #print(self.lr_info)
+            #print(scaf2.lr_info)
             for ctg in same_ctgs:
                 print(ctg + ": " + str(self.orientation[ctg]) + "  " + str(scaf2.orientation[ctg]))
             return    
@@ -879,6 +893,9 @@ with open(args.efile) as f:
         ecc = int(sline[10])
         lenc = int(sline[11])
         payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lenc":lenc}
+        if rid in blacklist:
+            if blacklist[rid] == ctg:
+                continue
         if rid in reads:
             reads[rid]["maps"].append(payload)
         else:
@@ -931,6 +948,24 @@ for i in range(1,10):
     dwg.add(dwg.line( (xpad + (10000/100)/10 * i, yp-1), (xpad + (10000/100)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
 dwg.add(dwg.line((xpad + 10000/100, yp-2), ( xpad +10000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 yp += 10
+dwg.add(dwg.text("100k bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+yp += 10
+dwg.add(dwg.line((xpad, yp), ( xpad + 100000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+for i in range(1,10):
+    dwg.add(dwg.line( (xpad + (100000/100)/10 * i, yp-1), (xpad + (100000/100)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
+dwg.add(dwg.line((xpad + 100000/100, yp-2), ( xpad +100000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+yp += 10
+g1M = dwg.defs.add(dwg.g(id='g003'))
+g1M.add(dwg.text("1M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+yp += 10
+g1M.add(dwg.line((xpad, yp), ( xpad + 1000000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%')))
+for i in range(1,10):
+    g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%')))
+g1M.add(dwg.line((xpad + 1000000/100, yp-7), ( xpad +1000000/100, yp+7), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(g1M)
+yp += 20
 rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='green', stroke_width=1 ))
 rect.fill(color="none").dasharray([2, 2])
 dwg.add(dwg.text("region of scaffold covered by long read", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
@@ -956,7 +991,8 @@ while len(scaffolds)-olen_scaf != 0:
             scaf2 = scaffolds[contig2scaffold[contig][1]]
             scaf1.merge(scaf2)
             break
-    print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
+
+print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 def is_rightmost(ctg):
     try:
