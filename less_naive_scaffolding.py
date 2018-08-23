@@ -190,7 +190,7 @@ class Scaffold:
         return(sortedcontigs[-1])
 
 
-    def find_conflicts(self):
+    def find_conflicts(self,max_dist):
         sortedcontigs = sorted(self.contigset, key = lambda item: self.left_coords[item])
         sortedcontigs2 = sorted(self.contigset, key = lambda item: self.right_coords[item])
         scstring1 = "-".join(sortedcontigs)
@@ -201,11 +201,11 @@ class Scaffold:
         for ctg1,ctg2 in zip(sortedcontigs[:-1],sortedcontigs[1:]):
             if ctgpos[ctg1] > ctgpos[ctg2]:
                 print("Contigs " + ctg1 + " and " + ctg2 + " ordered badly. Removing scaffold.")
-                return True
+                #return True
             dist = ctgpos[ctg2] - ctgpos[ctg1]
-            if dist > 4:
-                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart(" + str(dist) + "). Removing scaffold.")
-                return True
+            if dist > max_dist:
+                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart (" + str(dist) + "). Removing scaffold.")
+                #return True
         return False
 
     # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
@@ -371,8 +371,6 @@ class Scaffold:
         del(scaffolds[id(scaf2)])
 
 
-        
-        
 
     def merge(self,scaf2):
         for rid, read in scaf2.lr_info.items():
@@ -388,7 +386,9 @@ class Scaffold:
             else:
                 same_orientation += 1
         if different_orientation > 0 and same_orientation > 0 :
-            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are oriented differentely in the two scaffolds.")
+            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are oriented differently in the two scaffolds.")
+            print(self.lr_info)
+            print(scaf2.lr_info)
             for ctg in same_ctgs:
                 print(ctg + ": " + str(self.orientation[ctg]) + "  " + str(scaf2.orientation[ctg]))
             return    
@@ -399,8 +399,18 @@ class Scaffold:
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
         if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
             print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
-            self.print_contig_sequence()
-            scaf2.print_contig_sequence()
+            for ctg in scaf2.contigset:
+                try:
+                    contig2scaffold[ctg].remove(id(scaf2))
+                except ValueError:
+                    print("id not found: " + str(id(scaf2)))
+                    print("for contig: " + str(ctg))
+                    print(contig2scaffold[ctg])
+            del(scaffolds[id(scaf2)])
+            print(sorted_same_ctgs1)
+            print(sorted_same_ctgs2)
+            #self.print_contig_sequence()
+            #scaf2.print_contig_sequence()
             return
         # This whole thing is not overly complicated but certainly tedious
         # First the scaffold that's more to the left is worked on, this is easier as coordinates don't change much in this scaffold
@@ -891,7 +901,7 @@ for rid in reads:
 
 for rid in greadst:
     nscaff = Scaffold.init_from_LR((rid,reads[rid]))
-    nscaff.get_sequence_th()
+    #nscaff.get_sequence_th()
     #nscaff.add_seq_info()
     scaffolds[id(nscaff)] = nscaff
 
@@ -899,8 +909,9 @@ for rid in greadst:
 toRemove = set()
 for idx,scaf in scaffolds.items():
     #find and get rid of conflicting scaffolds
-    if scaf.find_conflicts():
+    if scaf.find_conflicts(10):
         toRemove.add(idx)
+    pass
     
 for idx in toRemove:
     scaffolds[idx].delete()
@@ -945,7 +956,7 @@ while len(scaffolds)-olen_scaf != 0:
             scaf2 = scaffolds[contig2scaffold[contig][1]]
             scaf1.merge(scaf2)
             break
-print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
+    print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 def is_rightmost(ctg):
     try:
