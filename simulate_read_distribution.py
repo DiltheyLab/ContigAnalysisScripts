@@ -1,23 +1,70 @@
 import numpy as np
 from numpy.random import exponential as expo
-from random import randint
+from random import randint,sample
+from Bio import SeqIO
+from argparse import ArgumentParser
+from bisect import bisect_left, bisect_right
+
+parser = ArgumentParser() 
+parser.add_argument("contigfile", help="Contig File")
+parser.add_argument("--lenfile", help="Length of Reads File")
+args = parser.parse_args()
+
+contigs = {}
+
+for read in SeqIO.parse(args.contigfile, "fasta"):
+    contigs[read.id] = len(read.seq)
+
+lengths = []
+if args.lenfile:
+    with open(args.lenfile) as f:
+        for line in f:
+            lengths.append(int(line.rstrip()))
+
 
 lchr6 =170805979
 smhc =  28510120
 emhc =  33480577
 lmhc = emhc - smhc
 
+pos = 0
+nr = 0
+crucial_points = []
+while pos < lmhc:
+    ctgs = sample(contigs.keys(),1)
+    crucial_points.append(pos + contigs[ctgs[0]])
+    pos += contigs[ctgs[0]]
+    #print(pos)
+    nr += 1
+
+cp_fixed = {}
+
 # LSK108
 # Number of reads in chr6 and or in contigs 
 nreads = 37844 + 1085
-nreads = nreads*3
+nreads = nreads*5
+#nreads = nreads*2
+
+def find_ge(a, x):
+    'Find leftmost index with item greater than or equal to x'
+    i = bisect_left(a, x)
+    if i != len(a):
+        return i
+    else:
+        return len(a)-1
+    raise ValueError
 #nreads = int(nreads/2)
 good = 0
 bad = 0
-# the length can be modelled as an exponential distribution
-for run in range(0,1000):
-    mhc = np.zeros(lmhc)
-    draws = expo(8000,[nreads,1])+1200
+for run in range(0,100):
+    for cp in crucial_points:
+        cp_fixed[cp] = 0
+    #mhc = np.zeros(lmhc)
+    # the length can be modelled as an exponential distribution
+    if args.lenfile:
+        draws = sample(lengths,nreads)
+    else:
+        draws = expo(8000,[nreads,1])+1000
     print("  " + str(run+1)+"\r" , end='', flush = True)
 
     for draw in draws:
@@ -34,9 +81,17 @@ for run in range(0,1000):
                 eidx = int(bidx + draw)
             else:
                 eidx = int(lmhc)
-            mhc[bidx:eidx] += 1
+            if eidx - bidx < 100:
+                continue
+            cpil = bisect_right(crucial_points, bidx+50)
+            cpir = bisect_right(crucial_points, eidx-50)
+            if cpil < cpir:
+                for cp in crucial_points[cpil:cpir+1]:
+                    cp_fixed[cp] += 1
 
-    if 0 not in mhc:
+    #print(cp_fixed)
+
+    if 0 not in cp_fixed.values():
         good += 1
     else:
         bad += 1
