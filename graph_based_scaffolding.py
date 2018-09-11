@@ -20,6 +20,10 @@ parser.add_argument("--mindepth", help="Minimal depth", type=int, default=25)
 
 args = parser.parse_args()
 
+# global data structures
+contigs = {}
+contig2scaf = {}
+
 if args.summaryfile:
     with open(args.summaryfile) as f:
         for line in f:
@@ -49,11 +53,49 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
+class Node:
+    segments = {} # id1: (lc1, rc1)
+    sizes_nc = [] # sizes of contigs that determine the average (that were Not Cut)
+    
+    def get_right_nb(self):
+        pass
+    
+    def get_distance_table(self):
+        pass
+        
+    
+    def get_avg(self):
+        return = np.mean(self.sizes_nc)
+    def __init__():
+
+class Edge:
+    sizes = {} # no need for non cut edges
+    def get_avg(self):
+        avg = np.mean(self.sizes.values())
+    def __init__():
+
+# a scaffold is a connected graph of contig-nodes 
 class Scaffold:
+    distanceMatrix = [][]
+    length = 0 # length is defined by the average distances and the average node sizes 
+    nodes = set([])
+
+    def update_distance_matrix(self):
+        pass
+    
+    def compare(self, scaf2):
+        #compare their distance matrices
+        pass
+
+    def to_graph_string(self):
+        # give a graph string in order to visualize this ting
+    
+    def __init__():
     
     @classmethod
     def init_from_longread(cls,lr):
         newinst = cls()
+        
         return newinst
     
 
@@ -64,9 +106,10 @@ with open(args.efile) as f:
         #sline = line.split()
         [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
         payload = {"contig":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-        if rid in blacklist:
-            if blacklist[rid] == ctg:
-                continue
+        if args.blacklistfile:
+            if rid in blacklist:
+                if blacklist[rid] == ctg:
+                    continue
         if rid in lreads:
             lreads[rid]["maps"].append(payload)
         else:
@@ -84,11 +127,11 @@ for rid in lreads:
         if item["contig"].endswith(args.linename) and item["contig"] != "1036QBL":
             counter +=1
             if counter >= args.mincontigs:
-                greadst[rid] = reads[rid]
+                greadst[rid] = lreads[rid]
                 break
 
 for rid in greadst:
-    nscaff = Scaffold.init_from_longread((rid,reads[rid]))
+    nscaff = Scaffold.init_from_longread((rid,lreads[rid]))
     scaffolds[id(nscaff)] = nscaff
 
 
