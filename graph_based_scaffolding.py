@@ -23,6 +23,10 @@ args = parser.parse_args()
 # global data structures
 contigs = {}
 contig2scaf = {}
+scaffolds = {}
+
+# in clusters similar scaffolds will be stored, for manual curation
+clusters = set()
 
 if args.summaryfile:
     with open(args.summaryfile) as f:
@@ -65,18 +69,22 @@ class Node:
         
     
     def get_avg(self):
-        return = np.mean(self.sizes_nc)
-    def __init__():
+        return np.mean(self.sizes_nc)
+
+    def __init__(self, contiginfo):
+        #lc1 = 
+        pass
 
 class Edge:
     sizes = {} # no need for non cut edges
     def get_avg(self):
         avg = np.mean(self.sizes.values())
     def __init__():
+        pass
 
 # a scaffold is a connected graph of contig-nodes 
 class Scaffold:
-    distanceMatrix = [][]
+    distanceMatrix = []
     length = 0 # length is defined by the average distances and the average node sizes 
     nodes = set([])
 
@@ -88,14 +96,18 @@ class Scaffold:
         pass
 
     def to_graph_string(self):
+        pass
         # give a graph string in order to visualize this ting
     
-    def __init__():
+    def __init__(self):
+        pass
     
     @classmethod
-    def init_from_longread(cls,lr):
+    def init_from_longread(cls,longread):
         newinst = cls()
-        
+        [lrid, lr] = longread
+        for m in lr["maps"]:
+            Node(m)
         return newinst
     
 
@@ -105,21 +117,20 @@ with open(args.efile) as f:
     for line in f:
         #sline = line.split()
         [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-        payload = {"contig":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+        data = {"contig":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
         if args.blacklistfile:
             if rid in blacklist:
                 if blacklist[rid] == ctg:
                     continue
         if rid in lreads:
-            lreads[rid]["maps"].append(payload)
+            lreads[rid]["maps"].append(data)
         else:
             lreads[rid] = {}
             lreads[rid]["length"] = int(lenr)
-            lreads[rid]["maps"] = [payload]
+            lreads[rid]["maps"] = [data]
 
-scaffolds = {}
+
 # get interesting reads
-# and sort contigs by left coordinate
 greadst = {}
 for rid in lreads:
     counter = 0
@@ -130,9 +141,42 @@ for rid in lreads:
                 greadst[rid] = lreads[rid]
                 break
 
+# turn reads around if necessary
+for rid, lr in greadst.items():
+    bw = 0
+    fw = 0
+    for mapping in lr["maps"]:
+        if mapping["contig"].endswith(args.linename): 
+            if mapping["strand"] == 1:
+                bw += 1
+            elif mapping["strand"] == 0:
+                fw += 1
+            else:
+                raise ValueError("strand: " + str(mapping["strand"]))
+    if bw > fw:
+        for mapping in lr["maps"]:
+            if mapping["contig"].endswith(args.linename): 
+                mapping["strand"] = 1 if mapping["strand"] == 0 else 0
+                mapping["scr"] = lr["length"] - mapping["ecr"]
+                mapping["ecr"] = lr["length"] - mapping["scr"]
+                mapping["scc"] = mapping["lenc"] - mapping["ecc"]
+                mapping["ecc"] = mapping["lenc"] - mapping["scc"]
+        
+    # turn around and redefine wrong contigs
+    for mapping in lr["maps"]:
+        if mapping["contig"].endswith(args.linename): 
+            if mapping["strand"] == 1: #define a new contigname and turn it around
+                mapping["contig"] = mapping["contig"] + "rc"
+                mapping["scc"] = mapping["lenc"] - mapping["ecc"]
+                mapping["ecc"] = mapping["lenc"] - mapping["scc"]
+                mapping["strand"] = 0
+        
+
 for rid in greadst:
     nscaff = Scaffold.init_from_longread((rid,lreads[rid]))
     scaffolds[id(nscaff)] = nscaff
+
+scaffolds = {}
 
 
 # cluster np-reads 
