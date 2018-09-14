@@ -37,11 +37,15 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 
 #blacklist
 blacklist = {}
+complete_read = set()
 if args.blacklistfile:
     with open(args.blacklistfile) as f:
         for line in f:
             idx, ctg = line.strip().split()
-            blacklist[idx] = ctg
+            if ctg == "all":
+                complete_read.add(idx)
+            else:
+                blacklist[idx] = ctg
 
 print(blacklist)
 
@@ -56,6 +60,8 @@ with open(args.efile) as f:
             if rid in blacklist:
                 if blacklist[rid] == ctg:
                     continue
+            elif rid in complete_read:
+                continue
         if rid in lreads:
             lreads[rid]["maps"].append(data)
         else:
@@ -170,6 +176,7 @@ for lrs in combs:
         stdev = (np.std(dists))
         if stdev > 500:
             show_distances(lr1,lr2,lrs[0],lrs[1],common_ctgs)
+            print("-" * 200)
             #print(lrs[0]  + " + " + lrs[1])
         all_dists.append(dists)
         #print(dists)
