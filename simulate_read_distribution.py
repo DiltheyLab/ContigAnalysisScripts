@@ -8,6 +8,7 @@ from bisect import bisect_left, bisect_right
 parser = ArgumentParser() 
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("--lenfile", help="Length of Reads File")
+parser.add_argument("--ul_lenfile", help="Length of Ultralong-Reads File")
 args = parser.parse_args()
 
 contigs = {}
@@ -20,6 +21,11 @@ if args.lenfile:
     with open(args.lenfile) as f:
         for line in f:
             lengths.append(int(line.rstrip()))
+ul_lengths = []
+if args.ul_lenfile:
+    with open(args.ul_lenfile) as f:
+        for line in f:
+            ul_lengths.append(int(line.rstrip()))
 
 
 lchr6 =170805979
@@ -42,8 +48,10 @@ cp_fixed = {}
 # LSK108
 # Number of reads in chr6 and or in contigs 
 nreads = 37844 + 1085
-nreads = nreads*5
-#nreads = nreads*2
+#nreads = nreads*5
+nul_reads = 10511 - 9 + 4735 - 2208
+nreads = int(nreads*2)
+#nul_reads = nul_reads*2
 
 def find_ge(a, x):
     'Find leftmost index with item greater than or equal to x'
@@ -56,7 +64,10 @@ def find_ge(a, x):
 #nreads = int(nreads/2)
 good = 0
 bad = 0
-for run in range(0,100):
+unbridged = 0
+runs = 1000
+
+for run in range(0,runs):
     for cp in crucial_points:
         cp_fixed[cp] = 0
     #mhc = np.zeros(lmhc)
@@ -65,9 +76,15 @@ for run in range(0,100):
         draws = sample(lengths,nreads)
     else:
         draws = expo(8000,[nreads,1])+1000
+    if args.ul_lenfile:
+        ul_draws = sample(ul_lengths,nul_reads)
+    else:
+        ul_draws = []
     print("  " + str(run+1)+"\r" , end='', flush = True)
 
-    for draw in draws:
+    all_draws = draws + ul_draws
+
+    for draw in all_draws:
         beg = randint(1,int(lchr6-draw))
         end = beg+draw
         bidx = 0
@@ -90,11 +107,13 @@ for run in range(0,100):
                     cp_fixed[cp] += 1
 
     #print(cp_fixed)
+    
 
     if 0 not in cp_fixed.values():
         good += 1
     else:
         bad += 1
+    unbridged += list(cp_fixed.values()).count(0)
 
-print("Good: " + str(good) + "\tBad: " + str(bad))
+print("Good: " + str(good) + "\tBad: " + str(bad) +"\tUnbridged: " + str(unbridged/runs))
             
