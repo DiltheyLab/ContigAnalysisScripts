@@ -52,17 +52,17 @@ if args.summaryfile:
     with open(args.summaryfile) as f:
         for line in f:
             sline = line.split()
-            if sline[1] == "NA":
-                continue
+            #if sline[1] == "NA":
+            #    continue
             if int(sline[2]) < args.mindepth:
                 continue
             ctg1 = sline[0].split("_")[0].strip("+").strip("-")
             ctg2 = sline[0].split("_")[1].strip("+").strip("-")
             ori1 = sline[0].split("_")[0][0]
             ori2 = sline[0].split("_")[1][0]
-            distance = float(sline[1])
+            distance = float(sline[3])
             dist = int(distance)
-            if distance < 1000 and distance > -200:
+            if distance < 1000 and distance > -1000:
                 if ori1 == ori2:
                     if ori1 == "+":
                         add_neighs(ctg1,ctg2,"right",dist)
@@ -80,11 +80,15 @@ if args.summaryfile:
                         add_neighs(ctg2,ctg1,"left",dist)
 
 blacklist = {}
+blacklist_fullread = set()
 if args.blacklistfile:
     with open(args.blacklistfile) as f:
         for line in f:
             sline = line.split()
-            blacklist[sline[0]] = sline[1]
+            if sline[1] == "all":
+                blacklist_fullread.add(sline[0])
+            else:
+                blacklist[sline[0]] = sline[1]
 
 print(blacklist)
    
@@ -212,29 +216,22 @@ class Scaffold:
         if scstring1 != scstring2:
             print("Conflict! " + scstring1 + " " + scstring2 + " . Removing scaffold.")
             return True
-        for ctg1,ctg2 in zip(sortedcontigs[:-1],sortedcontigs[1:]):
-            if ctgpos[ctg1] > ctgpos[ctg2]:
-                print("Contigs " + ctg1 + " and " + ctg2 + " ordered badly. Removing scaffold.")
-                #return True
-            dist = ctgpos[ctg2] - ctgpos[ctg1]
-            if dist > max_dist:
-                print("Contigs " + ctg1 + " and " + ctg2 + " too far apart (" + str(dist) + "). Removing scaffold.")
-                #return True
         return False
 
     # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
-    def to_SVG(self, img, xoff, yoff):
+    def to_SVG(self, img, xoff, yoff,show_lr_ids):
         ypad = 7
         col = "black"
         nr_longreads = len(self.longread_coords)
-        y_space_per_longread = 4
         ypos = 0
-        for lrid, lrc in self.longread_coords.items():
-            ylen = nr_longreads * y_space_per_longread - ypos
-            rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
-            rect.fill(color="none").dasharray([2, 2])
-            img.add(dwg.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
-            ypos += y_space_per_longread
+        if show_lr_ids:
+            y_space_per_longread = 4
+            for lrid, lrc in self.longread_coords.items():
+                ylen = nr_longreads * y_space_per_longread - ypos
+                rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
+                rect.fill(color="none").dasharray([2, 2])
+                img.add(dwg.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
+                ypos += y_space_per_longread
         ypos += ypad
             
         img.add(dwg.line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
@@ -358,6 +355,8 @@ class Scaffold:
             print( ctg1 + " is not in " + id(self))
         scaf1 = scaffolds[contig2scaffold[ctg1][0]]
         scaf2 = scaffolds[contig2scaffold[ctg2][0]]
+        if id(scaf1) != id(self):
+            print("Problem with ids. self :" + str(id(self)) + " scaf1: " + str(id(scaf1)))
 
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
@@ -382,8 +381,8 @@ class Scaffold:
             self.orientation[ctg] = ori
         Scaffold.nr_of_scaffolds -= 1
         self.set_new_length()
+        #del(contig2scaffold[ctg2][0])
         del(scaffolds[id(scaf2)])
-
 
 
     def merge(self,scaf2):
@@ -412,10 +411,14 @@ class Scaffold:
         sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
         if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
-            print("Problem merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contigs are not ordered the same way in the two scaffolds.")
+            print("Problem merging " + str(self.lr_info.keys()) + " and " + str(scaf2.lr_info.keys()) + ". Contigs are not ordered the same way in the two scaffolds.")
             for ctg in scaf2.contigset:
                 try:
                     contig2scaffold[ctg].remove(id(scaf2))
+                    #if not id(self) in contig2scaffold[ctg]:
+                    #    contig2scaffold[ctg].append(id(self))
+                    #if contig2scaffold[ctg] == []:
+                    #    contig2scaffold.pop(ctg)
                 except ValueError:
                     print("id not found: " + str(id(scaf2)))
                     print("for contig: " + str(ctg))
@@ -456,7 +459,7 @@ class Scaffold:
 
 
         def has_similar_mapping_length(scaf1, ctg1, scaf2, ctg2):
-            tolerance = 0.2
+            tolerance = 0.3
             l1 = scaf1.get_ctg_len(ctg1)
             l2 = scaf2.get_ctg_len(ctg2)
             if  l1 == -1:
@@ -559,8 +562,6 @@ class Scaffold:
                 contig2scaffold[ctg].append(id(self))
         del(scaffolds[id(scaf2)])
                 
-
-
 
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
     # The sequences are not taken into account for the merging procedure (the script is called 'less_naive' not 'intricate')
@@ -729,7 +730,7 @@ class Scaffold:
         actions = []
         status = "in_lr"
         last_change_pos = 1
-        ctgnr = 0
+        ctgs = []
         for pos in range(0,self.length):
             rpos = pos + 1
             if self.coords[pos] != ("","",""):
@@ -896,6 +897,8 @@ with open(args.efile) as f:
         if rid in blacklist:
             if blacklist[rid] == ctg:
                 continue
+        elif rid in blacklist_fullread:
+            continue
         if rid in reads:
             reads[rid]["maps"].append(payload)
         else:
@@ -998,14 +1001,23 @@ def is_rightmost(ctg):
     try:
         assert(len(contig2scaffold[ctg]) == 1)
     except AssertionError:
-        print("More than one scaffold for contig " + ctg1)
+        print("Other than one scaffold for contig " + ctg1 + " | number of contigs: " + str(len(contig2scaffold[ctg])))
     scaf = scaffolds[contig2scaffold[ctg][0]]
     if ctg == scaf.get_rightmost_contig():
         return True
     return False
 
 def is_leftmost(ctg):
+    try:
+        assert(len(contig2scaffold[ctg]) == 1)
+    except AssertionError:
+        print("Other than one scaffold for contig " + ctg1 + " | number of contigs: " + str(len(contig2scaffold[ctg])))
+    #try:
+    #print(contig2scaffold[ctg])
     scaf = scaffolds[contig2scaffold[ctg][0]]
+    #except KeyError:
+    #    print("Problem during is_leftmost. For contig: " + ctg)
+    #    sys.exit(1)
     if ctg == scaf.get_leftmost_contig():
         return True
     return False
@@ -1015,37 +1027,50 @@ if args.summaryfile:
     somethingHappened = True
     while somethingHappened:
         somethingHappened = False
-        for ctg1 in srneighs:
-            if ctg1 in contig2scaffold and is_rightmost(ctg1):
-                scaf1 = scaffolds[contig2scaffold[ctg1][0]]
-                for ctg2 in srneighs[ctg1]["right"]:
-                    if ctg2[0] in contig2scaffold and is_leftmost(ctg2[0]):
-                        scaf2 = scaffolds[contig2scaffold[ctg2[0]][0]]
-                        scaf1.merge_sr(ctg1,ctg2[0],ctg2[1])
-                        somethingHappened = True
-                    elif ctg2[0] in contig2scaffold:
-                        pass
-                        #print("Problem merging")
+        for scafid, scaffold in scaffolds.copy().items():
+            if somethingHappened:
+                break
+            ctg1 = scaffold.get_rightmost_contig()
+            if not ctg1 in srneighs:
+                continue
+            for ctg2n,ctg2d in srneighs[ctg1]["right"]:
+                if ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 and is_leftmost(ctg2n):
+                    scaf2 = scaffolds[contig2scaffold[ctg2n][0]]
+                    #print("merged away " + str(id(scaf2)))
+                    #print("contig: " + ctg1)
+                    scaffold.merge_sr(ctg1,ctg2n,ctg2d)
+                    somethingHappened = True
+                    break
+                elif ctg2n in contig2scaffold:
+                    pass
+                    #print("Problem merging")
+                else:
+                    scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0)
+                    if ctg2n not in contigs:
+                        print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
                     else:
-                        scaf1.add_short_read_contig_right(ctg1,ctg2[0],ctg2[1], 0)
-                        del(contigs[ctg2[0]])
-                        somethingHappened = True
-        for ctg1 in srneighs:
-            if ctg1 in contig2scaffold and is_leftmost(ctg1):
-                scaf1 = scaffolds[contig2scaffold[ctg1][0]]
-                for ctg2 in srneighs[ctg1]["left"]:
-                    if ctg2[0] in contig2scaffold: 
-                        pass
+                        del(contigs[ctg2n])
+                    somethingHappened = True
+            for ctg2n,ctg2d in srneighs[ctg1]["left"]:
+                if ctg2n in contig2scaffold:
+                    pass
+                    #print("Problem merging")
+                else:
+                    scaffold.add_short_read_contig_left(ctg1,ctg2n,ctg2d, 0)
+                    if ctg2n not in contigs:
+                        print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
                     else:
-                        scaf1.add_short_read_contig_left(ctg1,ctg2[0],ctg2[1], 0)
-                        del(contigs[ctg2[0]])
-                        somethingHappened = True
+                        del(contigs[ctg2n])
+                    somethingHappened = True
+
+print(contig2scaffold["316APD"])
+
 
         
 
 # Draw all scaffolds
 for scaf in scaffolds.values():
-    yp += scaf.to_SVG(dwg, xpad, yp) + 10
+    yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
 
 dwg.save()
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
