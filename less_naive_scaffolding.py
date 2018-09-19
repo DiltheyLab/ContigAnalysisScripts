@@ -79,6 +79,15 @@ if args.summaryfile:
                         add_neighs(ctg1,ctg2,"left",dist)
                         add_neighs(ctg2,ctg1,"left",dist)
 
+# some custom additions
+add_neighs("224APD","976APD","right",16.67)
+add_neighs("916APD","1247APD","right",116.8)
+add_neighs("2406APD","1671APD","right",52.3)
+add_neighs("105APD","726APD","right",-40.1)
+add_neighs("726APD","1674APD","right",304.0)
+add_neighs("2080APD","2377APD","right",361.9)
+add_neighs("2377APD","928APD","right",75.6)
+
 blacklist = {}
 blacklist_fullread = set()
 if args.blacklistfile:
@@ -1063,7 +1072,6 @@ if args.summaryfile:
                         del(contigs[ctg2n])
                     somethingHappened = True
 
-print(contig2scaffold["316APD"])
 
 
         
