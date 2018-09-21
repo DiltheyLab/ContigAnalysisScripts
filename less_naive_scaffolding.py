@@ -41,8 +41,9 @@ def add_neighs(ctg1, ctg2, relpos, dist):
         if ctg2 not in [x[0] for x in srneighs[ctg1][relpos]]:
             srneighs[ctg1][relpos].append((ctg2,dist))
         if ctg2 in [x[0] for x in srneighs[ctg1][get_other_relpos(relpos)]]:
-            print("Conflict for " + ctg1 + " and " + ctg2)
-            print(srneighs[ctg1])
+            pass
+            #print("Conflict for " + ctg1 + " and " + ctg2)
+            #print(srneighs[ctg1])
     else:
         srneighs[ctg1] = {"left": [], "right": []}
         srneighs[ctg1][relpos] = [(ctg2, dist)]
@@ -87,6 +88,8 @@ add_neighs("105APD","726APD","right",-40.1)
 add_neighs("726APD","1674APD","right",304.0)
 add_neighs("2080APD","2377APD","right",361.9)
 add_neighs("2377APD","928APD","right",75.6)
+add_neighs("504APD", "49APD","right",-460.3)
+add_neighs("49APD","116APD","right",-4.8)
 
 blacklist = {}
 blacklist_fullread = set()
@@ -969,13 +972,15 @@ for i in range(1,10):
 dwg.add(dwg.line((xpad + 100000/100, yp-2), ( xpad +100000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 yp += 10
 g1M = dwg.defs.add(dwg.g(id='g003'))
-g1M.add(dwg.text("1M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+g1M.add(dwg.text("M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
 yp += 10
-g1M.add(dwg.line((xpad, yp), ( xpad + 1000000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
-g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%')))
-for i in range(1,10):
-    g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%')))
-g1M.add(dwg.line((xpad + 1000000/100, yp-7), ( xpad +1000000/100, yp+7), stroke=svgwrite.rgb(0, 0, 0, '%')))
+g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
+g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
+for i in range(0,31):
+    if i%10 == 0:
+        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-7), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
+    else:
+        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
 dwg.add(g1M)
 yp += 20
 rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='green', stroke_width=1 ))
