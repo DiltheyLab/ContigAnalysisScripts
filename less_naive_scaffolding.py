@@ -266,7 +266,7 @@ class Scaffold:
             else:
                 yt = yoff+ypos+7
             above = not above
-            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:4"))
+            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
@@ -285,7 +285,7 @@ class Scaffold:
             else:
                 yt = yoff+ypos+7
             above = not above
-            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:4"))
+            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
@@ -419,6 +419,11 @@ class Scaffold:
             return    
         if different_orientation > same_orientation : 
             pass
+
+        #if ("457APD" in self.contigset and "869APD" in scaf2.contigset) or ("457APD" in scaf2.contigset and "869APD" in self.contigset):
+        #    print(self.lr_info.keys())
+        #    print(scaf2.lr_info.keys())
+        #    print(same_ctgs)
             
         sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
@@ -482,12 +487,12 @@ class Scaffold:
                 return False if l1 > l2* (1+tolerance) else True
             else:
                 return False if l2 > l1* (1+tolerance) else True
+
         for ctg in same_ctgs:
             lonedge = lsorted_ctgs[0] == ctg or lsorted_ctgs[-1] == ctg
             ronedge = rsorted_ctgs[0] == ctg or rsorted_ctgs[-1] == ctg
             if not (lonedge or ronedge or has_similar_mapping_length(lscaf, ctg, rscaf, ctg)):
-                print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mappging lengths in the two scaffolds.")
-        
+                print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mapping lengths (" + str(lscaf.get_ctg_len(ctg)) + "/" + str(rscaf.get_ctg_len(ctg)) + ") in the two scaffolds.")
         last_right_coord = 0
         nleft_coords = {}
         nright_coords = {}
@@ -978,9 +983,12 @@ g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/100, yp), stroke=svgwrite.rgb(0, 0
 g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
 for i in range(0,31):
     if i%10 == 0:
-        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-7), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
+        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-7), (xpad + (1000000/100)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
     else:
-        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+5000), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
+        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
+g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/100-10, yp-10), fill='black', style="font-size:10"))
+g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/100-10, yp-10), fill='black', style="font-size:10"))
+g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/100-10, yp-10), fill='black', style="font-size:10"))
 dwg.add(g1M)
 yp += 20
 rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='green', stroke_width=1 ))
@@ -1076,8 +1084,6 @@ if args.summaryfile:
                     else:
                         del(contigs[ctg2n])
                     somethingHappened = True
-
-
 
         
 
