@@ -6,7 +6,9 @@ import sys
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
+parser.add_argument("--whitelist", help="Only plot long reads with ids found in this whitelist file.")
 parser.add_argument("cellline", help="Name of the cellline")
+parser.add_argument("output", help="SVG output file")
 
 args = parser.parse_args()
 
@@ -58,55 +60,68 @@ for rid in reads:
             
 intersection = greads_contigset.intersection(intreads_contigset)
 sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.cellline)))
-print(sintersection)
+#print(sintersection)
 
 
 for rid in intreads:
     if len(intreads[rid]["overlaps"]) == 1:
-        print("\t".join([rid, str(intreads[rid])]))
+        pass
+        #print("\t".join([rid, str(intreads[rid])]))
         
 
 # sort contigs by left coordinate
 for rid in greadst:
-    #print(reads[rid]["overlaps"])
     soverlaps = sorted(reads[rid]["overlaps"], key = itemgetter(2))
+    #print(reads[rid]["overlaps"])
     greads[rid] = greadst[rid]
     greads[rid]["overlaps"]=soverlaps
 
 ogreads = greads.copy()
 
 
-# cluster np-reads 
+# cluster np-reads or only keep whitelisted ones
 creads = {}
+whitelist = set()
 clusternr = 0
-while len(greads) > 0:
-    clusternr += 1
-    current_cluster = {}
-    current_contigs = set()
-    # take a random read and build a cluster from it
-    cr = greads.popitem()
-    current_cluster[cr[0]] = cr[1]
-    #print(len(current_cluster))
-    olen = 0
-    while len(current_cluster) != olen:
-        olen = len(current_cluster)
-        for contig in cr[1]["overlaps"]:
-            if not contig[0].startswith("chr"):
-                current_contigs.add(contig[0])
-        #print("contigs: " + str(current_contigs))
-        for readid,readval in greads.items():
-            contig_found = False
-            for contig in readval["overlaps"]:
-                if contig[0] in current_contigs:
-                    contig_found = True
-                    current_cluster[readid] = readval
-                    cr = (readid, greads.pop(readid))
+if(args.whitelist):
+    with open(args.whitelist) as f:
+        for line in f:
+            whitelist.add(line.strip())
+            
+    creads[0] = {}
+    for rid,read in greads.items():
+        for mapping in read["overlaps"]:
+            if mapping[0] in whitelist:
+                creads[0][rid] = read
+else:
+    while len(greads) > 0:
+        clusternr += 1
+        current_cluster = {}
+        current_contigs = set()
+        # take a random read and build a cluster from it
+        cr = greads.popitem()
+        current_cluster[cr[0]] = cr[1]
+        #print(len(current_cluster))
+        olen = 0
+        while len(current_cluster) != olen:
+            olen = len(current_cluster)
+            for contig in cr[1]["overlaps"]:
+                if not contig[0].startswith("chr"):
+                    current_contigs.add(contig[0])
+            #print("contigs: " + str(current_contigs))
+            for readid,readval in greads.items():
+                contig_found = False
+                for contig in readval["overlaps"]:
+                    if contig[0] in current_contigs:
+                        contig_found = True
+                        current_cluster[readid] = readval
+                        cr = (readid, greads.pop(readid))
+                        break
+                if contig_found:
                     break
-            if contig_found:
-                break
-        
-    print("cluster length: " + str(len(current_cluster)))
-    creads[clusternr] = current_cluster
+            
+        print("cluster length: " + str(len(current_cluster)))
+        creads[clusternr] = current_cluster
 
 
 
@@ -115,7 +130,7 @@ ypos = 0
 xtext = 10
 xpad = 200
 ypad = 10
-dwg = svgwrite.Drawing('qbl_reads.svg',size=(u'1700', u'4600'), profile='full')
+dwg = svgwrite.Drawing(args.output, size=(u'1700', u'4600'), profile='full')
 csize = 0
 bold = False
 for cluster in creads:
