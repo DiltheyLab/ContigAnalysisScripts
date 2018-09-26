@@ -960,8 +960,14 @@ dwg = svgwrite.Drawing(args.SVG,size=(u'1700', u'2200'), profile='full')
 yp = 10
 xtext = 10
 xpad = 20
-dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+dwg.add(dwg.text("600 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+yp += 5 
+dwg.add(dwg.line((xpad, yp), ( xpad + 600/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+dwg.add(dwg.line((xpad + 600/100, yp-2), ( xpad +600/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 yp += 10
+dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+yp += 5
 dwg.add(dwg.line((xpad, yp), ( xpad + 10000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
 dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 for i in range(1,10):
@@ -969,7 +975,7 @@ for i in range(1,10):
 dwg.add(dwg.line((xpad + 10000/100, yp-2), ( xpad +10000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 yp += 10
 dwg.add(dwg.text("100k bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 10
+yp += 5
 dwg.add(dwg.line((xpad, yp), ( xpad + 100000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
 dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
 for i in range(1,10):
@@ -978,7 +984,7 @@ dwg.add(dwg.line((xpad + 100000/100, yp-2), ( xpad +100000/100, yp+2), stroke=sv
 yp += 10
 g1M = dwg.defs.add(dwg.g(id='g003'))
 g1M.add(dwg.text("M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 10
+yp += 5
 g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
 g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
 for i in range(0,31):
