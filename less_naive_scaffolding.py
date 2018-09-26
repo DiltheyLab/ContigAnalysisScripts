@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from operator import itemgetter
-from itertools import combinations
+from itertools import combinations, cycle
 import svgwrite
 
 
@@ -248,7 +248,11 @@ class Scaffold:
             
         img.add(dwg.line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
 
-        above = True
+        ctg_y_drawsize = 8
+        ctg_y_halfdrawsize = ctg_y_drawsize/2
+        ctg_relative_positions = cycle([-ctg_y_halfdrawsize-1, ctg_y_halfdrawsize+3, -ctg_y_halfdrawsize-4, ctg_y_halfdrawsize+6])
+
+
         for ctg in sorted(self.contigset, key= lambda x: self.left_coords[x]):
             #print(read)
             sc = self.left_coords[ctg]
@@ -259,13 +263,8 @@ class Scaffold:
                 ctgn = ctgn[0:9]
             else:
                 ctgn = "$" + ctgn + "q"
-            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='black', stroke_width=1, fill = 'white'))
-            if above:
-                yt = yoff+ypos-4
-                col = "blue" if col == "black" else "black"
-            else:
-                yt = yoff+ypos+7
-            above = not above
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'white'))
+            yt = yoff + ypos + next(ctg_relative_positions)
             img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
@@ -278,20 +277,16 @@ class Scaffold:
             ec = self.right_coords[ctg]
             ctgn = ctg.rstrip(args.linename)
             ctgn = "$" + ctgn + "q"
-            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-3), ((ec-sc)/100,6), stroke='grey', stroke_width=1, fill = 'white'))
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='grey', stroke_width=1, fill = 'white'))
             col = "gray"
-            if above:
-                yt = yoff+ypos-4
-            else:
-                yt = yoff+ypos+7
-            above = not above
+            yt = yoff + ypos + next(ctg_relative_positions)
             img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
                 direction = "<"
             img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
-        return ypos+5
+        return ypos+7
 
     def set_new_length(self):
         for ctg, coord in self.right_coords.items():
