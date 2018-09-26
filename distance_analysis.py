@@ -9,7 +9,8 @@ from itertools import combinations
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
-parser.add_argument("summaryfile", help="contig distance summary file")
+parser.add_argument("summaryfile", help="Contig distance summary file")
+parser.add_argument("cellline", help="Name of cell line")
 
 args = parser.parse_args()
 
@@ -43,7 +44,7 @@ greadst = {}
 for rid in reads:
     counter = 0
     for item in reads[rid]["overlaps"]:
-        if item["contig"].endswith("QBL"):
+        if item["contig"].endswith(args.cellline):
             counter += 1
     if counter >= 2:
         greadst[rid] = reads[rid]
@@ -83,7 +84,7 @@ for rid in greads:
             distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
         else:
             continue
-        if int(ovold["contig"].rstrip("QBL")) < int(ovnew["contig"].rstrip("QBL")):
+        if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
             cstring = ovold["contig"] + "_" + ovnew["contig"]
         else:
             cstring = ovnew["contig"] + "_" + ovold["contig"]
@@ -102,6 +103,8 @@ for rid in greads:
         ovold = combo[0]
         if ovnew["contig"].startswith("chr") or ovold["contig"].startswith("chr"):
             continue
+        if "_" in ovnew["contig"] or "_" in ovold["contig"]:
+            continue
         if ovnew["contig"] == ovold["contig"]:
             continue
         if ovnew["strand"] == ovold["strand"]:
@@ -110,7 +113,7 @@ for rid in greads:
             continue
         #if abs(distance) > 2000:
         #    continue
-        if int(ovold["contig"].rstrip("QBL")) < int(ovnew["contig"].rstrip("QBL")):
+        if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
             cstring = ovold["contig"] + "_" + ovnew["contig"]
         else:
             cstring = ovnew["contig"] + "_" + ovold["contig"]
@@ -140,7 +143,7 @@ with open(args.summaryfile) as f:
         if float(sline[4]) > 2:
             continue
         moddist = float(sline[1])
-        if int(ctg1.rstrip("QBL")) < int(ctg2.rstrip("QBL")):
+        if int(ctg1.rstrip(args.cellline)) < int(ctg2.rstrip(args.cellline)):
             cstr = ctg1+"_"+ctg2
         else:
             cstr = ctg2+"_"+ctg1
