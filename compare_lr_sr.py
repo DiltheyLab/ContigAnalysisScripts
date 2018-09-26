@@ -66,7 +66,6 @@ with open(args.summaryfile) as f:
                     add_neighs(ctg2,ctg1,"left",dist)
 
 contigs = {}
-print(srneighs["1560QBL"])
 
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
@@ -103,7 +102,7 @@ greads = {}
 for rid in reads:
     counter = 0
     for item in reads[rid]["maps"]:
-        if item["contig"].endswith(args.linename) and item["contig"] != "1036QBL":
+        if item["contig"].endswith(args.linename):
             counter +=1
             if counter >= 2:
                 greadst[rid] = reads[rid]
@@ -149,7 +148,6 @@ for rid, read in greads.items():
 
 # we have srneighs and lrneighs
 #print(srneighs)
-print(lrneighs["1582QBL"])
 l = "left"
 r = "right"
 
