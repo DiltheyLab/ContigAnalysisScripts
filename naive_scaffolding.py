@@ -12,6 +12,7 @@ parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
+parser.add_argument("cellline", help="Cell Line")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
 
@@ -55,7 +56,7 @@ greadst = {}
 for rid in reads:
     counter = 0
     for item in reads[rid]["overlaps"]:
-        if item["contig"].endswith("QBL"):
+        if item["contig"].endswith(args.cellline):
             greadst[rid] = reads[rid]
             break
 for rid in greadst:
