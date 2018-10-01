@@ -33,7 +33,32 @@ contigs = {}
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
-print("Nr. of scaffolds: " + str(len(contigs)))
+sr_distances = {}
+with open(args.summaryfile) as f:
+    for line in f:
+        sline = line.split()
+        ori1 = sline[0].split("_")[0][0]
+        ori2 = sline[0].split("_")[1][0]
+        if ori1 != ori2:
+            continue
+        if ori1 == "-":
+            continue
+        [ctg1, ctg2] = sline[0].replace("+","").replace("-","").split("_")
+        if sline[1] == "NA":
+            continue
+        if float(sline[2]) < args.mindepth:
+            continue
+        moddist = float(sline[1])
+        # sanity check on the distance
+        if moddist + contigs[ctg2] < 0:
+            continue
+        if ctg1 in sr_distances:
+            sr_distances[ctg1][ctg2] = moddist
+        else:
+            sr_distances[ctg1] = {ctg2: moddist}
+
+
+
 
 #blacklist
 blacklist = {}
@@ -41,7 +66,8 @@ complete_read = set()
 if args.blacklistfile:
     with open(args.blacklistfile) as f:
         for line in f:
-            idx, ctg = line.strip().split()
+            idx, ctg =  line.strip().split()[0:2]
+            
             if ctg == "all":
                 complete_read.add(idx)
             else:
@@ -93,10 +119,12 @@ for rid,lr in lreads.items():
                 greads[rid] = lr
                 break
 
+lrids = []
 # turn reads around if necessary
 for rid, lr in greads.items():
     bw = 0
     fw = 0
+    lrids.append(rid)
     for mapping in lr["maps"]:
         if mapping["contig"].endswith(args.linename): 
             if mapping["strand"] == 1:
@@ -109,10 +137,12 @@ for rid, lr in greads.items():
         for mapping in lr["maps"]:
             if mapping["contig"].endswith(args.linename): 
                 mapping["strand"] = 1 if mapping["strand"] == 0 else 0
+                tmp = mapping["scr"]
                 mapping["scr"] = lr["length"] - mapping["ecr"]
-                mapping["ecr"] = lr["length"] - mapping["scr"]
+                mapping["ecr"] = lr["length"] - tmp
+                tmp = mapping["scc"]
                 mapping["scc"] = mapping["lenc"] - mapping["ecc"]
-                mapping["ecc"] = mapping["lenc"] - mapping["scc"]
+                mapping["ecc"] = mapping["lenc"] - tmp
         
     # turn around and redefine wrong contigs
     for mapping in lr["maps"]:
@@ -158,6 +188,10 @@ def show_distances(lr1,lr2,lr1id,lr2id, common_ctgs):
         dist = ((m1["scr"]-m1["scc"]) - (m2["scr"]-m2["scc"]))
         print(lr1id + " + " + lr2id + " - " + ctg + ": " + str(dist))
         
+lr_dists = {}
+#initialize matrix
+for lid in lrids:
+    lr_dists[lid] = {lid:([0],[0])}
 
 # get pair of overlapping read
 #lread1, lread2 = sample(list(greads.values()), 2)
@@ -173,6 +207,7 @@ for lrs in combs:
     common_ctgs = compare_longreads(lr1,lr2)
     if len(common_ctgs) > 0:
         dists = get_distances(lr1,lr2,common_ctgs)
+        lr_dists[lrs[0]][lrs[1]]=(dists,[])
         stdev = (np.std(dists))
         if stdev > 500:
             show_distances(lr1,lr2,lrs[0],lrs[1],common_ctgs)
@@ -180,6 +215,35 @@ for lrs in combs:
             #print(lrs[0]  + " + " + lrs[1])
         all_dists.append(dists)
         #print(dists)
+
+    # short reads !!
+    for m1 in lr1["maps"]:
+        ctg1 = m1["contig"]
+        for m2 in lr2["maps"]:
+            ctg2 = m2["contig"]
+            if ctg1 in sr_distances:
+                if ctg2 in sr_distances[ctg1]:
+                    
+                    sr_dist = m1["ecr"] - (contigs[ctg1] - m1["ecc"]) + sr_distances[ctg1][ctg2] - (m2["scr"] - m2["scc"])
+                    if lrs[1] in lr_dists[lrs[0]]:
+                        lr_dists[lrs[0]][lrs[1]][1].append(sr_dist)
+                    else:
+                        print(lrs[0] + " + " + lrs[1] + ": " + ctg1 + " " + ctg2)
+                        lr_dists[lrs[0]][lrs[1]]= ([],[sr_dist])
+                        
+    
+for lrid,lrdists in lr_dists.items():
+    for lrid2,dists in lrdists.items():
+        if dists[0] == [] and len(dists[1]) > 1:
+            print("interesting: " + str(lrid) + " " + str(lrid2) + " " + str(dists[1]))
+
+
+
+#for lrid,dists in lr_dists.items():
+#    print("-"*200)
+#    print(lrid)
+#    print(dists)
+
         
 devs = []
 for dists in all_dists:
