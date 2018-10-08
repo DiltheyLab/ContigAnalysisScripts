@@ -3,11 +3,13 @@ from Bio import SeqIO
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import numpy as np
 from random import sample
 import logging
 from logging import info
 from itertools import combinations
+from collections import defaultdict
 
 logging.basicConfig(filename='info.log',level=logging.DEBUG)
 
@@ -21,6 +23,7 @@ parser.add_argument("--blacklistfile", help="Blacklist File")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
 parser.add_argument("--mincontigs", help="Minimal number of contigs for long read to be considered", type=int, default=2)
+parser.add_argument("--unwanted_contigs", help="If given the contigs in this file will not be considered.")
 
 args = parser.parse_args()
 
@@ -32,6 +35,16 @@ contigs = {}
 
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
+
+#unwanted contigs
+unwanted_contigs = set()
+if args.unwanted_contigs:
+    with open(args.unwanted_contigs) as f:
+        for line in f:
+            ctg =  line.strip()
+            unwanted_contigs.add(ctg)
+            unwanted_contigs.add("b_" + ctg) # usual prefix for repeated contigs
+            unwanted_contigs.add("c_" + ctg)
 
 sr_distances = {}
 with open(args.summaryfile) as f:
@@ -48,19 +61,30 @@ with open(args.summaryfile) as f:
             continue
         if float(sline[2]) < args.mindepth:
             continue
+        if ctg1 in unwanted_contigs or ctg2 in unwanted_contigs:
+            continue
         moddist = float(sline[1])
         # sanity check on the distance
-        if moddist + contigs[ctg2] < 0:
+        if moddist + contigs[ctg1] < 0 or moddist + contigs[ctg2] < 0 :
             continue
         if ctg1 in sr_distances:
             sr_distances[ctg1][ctg2] = moddist
         else:
             sr_distances[ctg1] = {ctg2: moddist}
 
+# some sr distances suck
+sr_distances["1046APD"].pop("1550APD")
+sr_distances["1488APD"].pop("1553APD")
+sr_distances["169APD"].pop("530APD")
+sr_distances["2137APD"].pop("530APD")
+sr_distances["367APD"].pop("2038APD")
+sr_distances["367APD"].pop("398APD")
+sr_distances["544APD"].pop("1923APD")
+sr_distances["582APD"].pop("635APD")
 
 
 
-#blacklist
+#blacklist of long reads
 blacklist = {}
 complete_read = set()
 if args.blacklistfile:
@@ -73,7 +97,9 @@ if args.blacklistfile:
             else:
                 blacklist[idx] = ctg
 
-print(blacklist)
+            
+
+print(unwanted_contigs)
 
 # nanopore reads
 lreads = {}
@@ -88,28 +114,39 @@ with open(args.efile) as f:
                     continue
             elif rid in complete_read:
                 continue
+        if args.unwanted_contigs:
+            if ctg in unwanted_contigs:
+                continue
         if rid in lreads:
             lreads[rid]["maps"].append(data)
+            if int(ecr) > lreads[rid]["rm_ecr"]:
+                lreads[rid]["rm_ecr"] = int(ecr)
+            if int(scr) < lreads[rid]["lm_scr"]:
+                lreads[rid]["lm_scr"] = int(scr)
         else:
             lreads[rid] = {}
             lreads[rid]["length"] = int(lenr)
             lreads[rid]["maps"] = [data]
+            lreads[rid]["rm_ecr"] = int(ecr)
+            lreads[rid]["lm_scr"] = int(scr)
 
 # these reads are problematic
 def has_contigs_double(lr1):
     seen_ctgs = set()
     for ctg in lr1["maps"]:
         if ctg["contig"] in seen_ctgs:
-            return True
+            return ctg
         else:
-            seen_ctgs.add(ctg["contig"])
-    return False
+            if ctg["contig"].endswith(args.linename):
+                seen_ctgs.add(ctg["contig"])
+    return ""
 
 #filter for interesting np reads
 greads = {}
 for rid,lr in lreads.items():
-    if has_contigs_double(lr):
-        info(rid + " has contigs double")
+    double_ctg =  has_contigs_double(lr)
+    if double_ctg:
+        info(rid + " has contigs double " + str(double_ctg))
         continue
     counter = 0
     for item in lr["maps"]:
@@ -186,9 +223,10 @@ def show_distances(lr1,lr2,lr1id,lr2id, common_ctgs):
         m1 = get_contig_info(lr1,ctg)
         m2 = get_contig_info(lr2,ctg)
         dist = ((m1["scr"]-m1["scc"]) - (m2["scr"]-m2["scc"]))
-        print(lr1id + " + " + lr2id + " - " + ctg + ": " + str(dist))
+        #print(lr1id + " + " + lr2id + " - " + ctg + ": " + str(dist))
         
-lr_dists = {}
+lr_dist = defaultdict(lambda:([],[]))
+lr_dists = defaultdict(lambda:lr_dist)
 #initialize matrix
 for lid in lrids:
     lr_dists[lid] = {lid:([0],[0])}
@@ -198,44 +236,63 @@ for lid in lrids:
 #while len(compare_longreads(lread1,lread2)) == 0:
 #    lread1, lread2 = sample(list(greads.values()), 2)
 #common_ctgs = compare_longreads(lread1,lread2)
+
 all_dists = []
 
-combs = combinations(greads.keys(),2)
-for lrs in combs:
+for lrs in combinations(greads.keys(), 2):
     lr1 = greads[lrs[0]]
     lr2 = greads[lrs[1]]
-    common_ctgs = compare_longreads(lr1,lr2)
+    common_ctgs = compare_longreads(lr1, lr2)
     if len(common_ctgs) > 0:
-        dists = get_distances(lr1,lr2,common_ctgs)
-        lr_dists[lrs[0]][lrs[1]]=(dists,[])
+        dists = get_distances(lr1, lr2, common_ctgs)
+        lr_dists[lrs[0]][lrs[1]]=(dists, [])
+        ndists =[]
+        for d in dists:
+            ndists.append(-d)
+        lr_dists[lrs[1]][lrs[0]] = (ndists, [])
         stdev = (np.std(dists))
-        if stdev > 500:
-            show_distances(lr1,lr2,lrs[0],lrs[1],common_ctgs)
-            print("-" * 200)
+        if stdev < 50:
+            show_distances(lr1, lr2, lrs[0], lrs[1], common_ctgs)
+            #print("-" * 200)
             #print(lrs[0]  + " + " + lrs[1])
         all_dists.append(dists)
         #print(dists)
+        
 
-    # short reads !!
+    # short reads !
     for m1 in lr1["maps"]:
         ctg1 = m1["contig"]
         for m2 in lr2["maps"]:
             ctg2 = m2["contig"]
             if ctg1 in sr_distances:
                 if ctg2 in sr_distances[ctg1]:
-                    
-                    sr_dist = m1["ecr"] - (contigs[ctg1] - m1["ecc"]) + sr_distances[ctg1][ctg2] - (m2["scr"] - m2["scc"])
+                    sr_dist = m1["ecr"] + (contigs[ctg1] - m1["ecc"]) + sr_distances[ctg1][ctg2] - (m2["scr"] - m2["scc"])
+
                     if lrs[1] in lr_dists[lrs[0]]:
+                        #curr_dist = np.mean(lr_dists[lrs[0]][lrs[1]][1])
+                        #if abs(sr_dist - curr_dist) > 2000:
+                        #    print("\t".join(["curr_dist: " + str(curr_dist), "sr_dist: " + str(sr_dist), "ctg1: " + ctg1, "ctg2: " + ctg2, lrs[0], lrs[1]]))
                         lr_dists[lrs[0]][lrs[1]][1].append(sr_dist)
                     else:
-                        print(lrs[0] + " + " + lrs[1] + ": " + ctg1 + " " + ctg2)
+                        #print(lrs[0] + " + " + lrs[1] + ": " + ctg1 + " " + ctg2)
                         lr_dists[lrs[0]][lrs[1]]= ([],[sr_dist])
+                    if lrs[0] in lr_dists[lrs[1]]:
+                        lr_dists[lrs[1]][lrs[0]][1].append(-sr_dist)
+                    else:
+                        lr_dists[lrs[1]][lrs[0]]= ([],[-sr_dist])
                         
     
 for lrid,lrdists in lr_dists.items():
     for lrid2,dists in lrdists.items():
         if dists[0] == [] and len(dists[1]) > 1:
-            print("interesting: " + str(lrid) + " " + str(lrid2) + " " + str(dists[1]))
+            pass
+            #print("interesting: " + str(lrid) + " " + str(lrid2) + " " + str(dists[1]))
+        if len(dists[0]) > 1  and len(dists[1]) > 1:
+            #if abs(np.mean(dists[0]) - np.mean(dists[1])) > 50:
+            #    print("\t".join([str(lrid),str(lrid2),str(np.mean(dists[0])),  str(np.mean(dists[1]))]))
+            if abs(np.mean(dists[0]) - np.mean(dists[1])) > 500:
+                print("\t".join([str(lrid),str(lrid2),str(np.mean(dists[0])),  str(np.mean(dists[1]))]))
+                print("\t".join(["","",str(dists[0]),  str(dists[1])]))
 
 
 
@@ -248,13 +305,52 @@ for lrid,lrdists in lr_dists.items():
 devs = []
 for dists in all_dists:
     stdev = (np.std(dists))
-    if stdev > 500:
-        print(dists)
+    if stdev < 50:
+        pass
+#        print(dists)
     devs.append(stdev)
 
-#print(variances)
+# and now let's build a simple matrix
+# taking an arbitrary but fixed ordering
+lr_keys = lr_dists.keys()
+matrix = []
+
+for nr1, lr1 in enumerate(lr_keys):
+    row = []
+    for nr2, lr2 in enumerate(lr_keys):
+        if lr1 in lr_dists:
+            if lr2 in lr_dists[lr1]:
+                row.append(1)
+            else:
+                row.append(0)
+        else:
+            row.append(0)
+
+    matrix.append(row)
+
+plt.imsave('connectedness.png', np.array(matrix).reshape(len(lr_keys),len(lr_keys)), cmap=cm.gray)
+#plt.plot(np.array(matrix), cmap=cm.gray)
+#plt.show()
+print(lr_dists["0cf11d19-fcbf-4685-901f-32c4259eaf85"])
+
+cluster = 0
+unvisited_nodes = set(lr_keys)
+while unvisited_nodes:
+    cluster += 1
+    print("Cluster " + str(cluster))
+    start_node = unvisited_nodes.pop()
+    current_cluster = [start_node]
+    current_index = 0
+    while(current_index != len(current_cluster)):
+        for lr2 in lr_dists[current_cluster[current_index]]:
+            if lr2 not in current_cluster and lr2 in unvisited_nodes:
+                current_cluster.append(lr2)
+                unvisited_nodes.remove(lr2)
+        current_index += 1
+    print(current_cluster)
+    
 
 # get pairs of overlapping reads
-plt.hist(devs,150)
-plt.yscale('log', nonposy='clip')
-plt.show()
+#plt.hist(devs,150)
+#plt.yscale('log', nonposy='clip')
+#plt.show()
