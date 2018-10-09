@@ -7,6 +7,10 @@ import numpy as np
 from operator import itemgetter
 from itertools import combinations, cycle
 import svgwrite
+import logging
+from logging import info
+
+logging.basicConfig(filename='mergers.log',level=logging.INFO)
 
 
 parser = ArgumentParser()
@@ -28,6 +32,7 @@ contigs = {}
 allcontigs = {}
 contig2scaffold = {}
 
+clustercounter = 1
 
 srneighs = dict()
 
@@ -131,6 +136,7 @@ class Scaffold:
     nr_of_scaffolds = 0
     turned_around = False
     idx = ""
+    name = ""
     get_sequence_fragments = []
     #id = 
     # All contigs will have scaffold coordinates.
@@ -393,6 +399,9 @@ class Scaffold:
 
 
     def merge(self,scaf2):
+        # TODO extension/incorporation, distance
+        info("merging " + self.name + " and " + scaf2.name)
+
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
@@ -572,7 +581,10 @@ class Scaffold:
                 print(contig2scaffold[ctg])
             if id(self) not in contig2scaffold[ctg]:
                 contig2scaffold[ctg].append(id(self))
+        self.name = "cluster_" + str(clustercounter) 
+        clustercounter += 1
         del(scaffolds[id(scaf2)])
+
                 
 
     # After merging two scaffolds the coordinate systems have nothing to do with reality anymore
@@ -734,6 +746,7 @@ class Scaffold:
             contig2scaffold[ctg].remove(id(scaf2))
         del(scaffolds[id(scaf2)])
 
+    # Deprecated: the information is now saved during merging
     # Do not use this!
     # Extracting the sequence is difficult because the sequence data may not be available to you locally.
     # You should write your own method for this. This is my own special case that's why this method has _th as suffix
@@ -887,6 +900,7 @@ class Scaffold:
             newinst.turn_around()    
         
         
+        newinst.name = lr[0]
         newinst.idx = id(newinst)
         return newinst
     
