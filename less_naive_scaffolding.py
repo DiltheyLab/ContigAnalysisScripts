@@ -7,10 +7,10 @@ import numpy as np
 from operator import itemgetter
 from itertools import combinations, cycle
 import svgwrite
-import logging
-from logging import info
+#import logging
+#from logging import info
 
-logging.basicConfig(filename='mergers.log',level=logging.INFO)
+#logging.basicConfig(filename='mergers.log',level=logging.INFO)
 
 
 parser = ArgumentParser()
@@ -18,6 +18,7 @@ parser.add_argument("efile", help="Error rate file")
 parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
+parser.add_argument("--mergefile", help="File that contains merging information to retrieve the sequence of scaffolds after.")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
@@ -26,13 +27,13 @@ parser.add_argument("--mindepth", help="Minimal depth", type=int, default=25)
 
 args = parser.parse_args()
 
+
 reads = {}
 greads = {}
 contigs = {}
 allcontigs = {}
 contig2scaffold = {}
-
-clustercounter = 1
+cluster_counter = 1
 
 srneighs = dict()
 
@@ -118,9 +119,11 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
     ctgpos[read.id] = pos
     
 
+
 print("Nr. of scaffolds: " + str(len(contigs)))
 
 class Scaffold:
+    global cluster_counter
     scaf_info = []
     sr_info = dict()
     lr_info = dict()
@@ -398,9 +401,10 @@ class Scaffold:
         del(scaffolds[id(scaf2)])
 
 
+
+
     def merge(self,scaf2):
-        # TODO extension/incorporation, distance
-        info("merging " + self.name + " and " + scaf2.name)
+        global cluster_counter
 
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
@@ -470,6 +474,21 @@ class Scaffold:
             else:
                 lscaf = self
                 rscaf = scaf2
+
+        # This may be redundant and may have to get cleaned up later on.
+        # The distance of the two longreads is needed.
+        # As best guess the distance is taken that is given by the common contig
+        # that is rightmost on both scaffolds
+        rctg = sorted_same_ctgs1[-1]
+        distance = (lscaf.left_coords[rctg] - lscaf.left_coords_contig[rctg]) - (rscaf.left_coords[rctg] - rscaf.left_coords_contig[rctg])
+
+        # merge info into mergefile 
+        mode = "incorporation" if distance + rscaf.length < lscaf.length else "extension"
+        if args.mergefile:
+            with open(args.mergefile, "a+") as mergef:
+                mergef.write("\t".join([mode ,lscaf.name, rscaf.name, str(distance), "cluster_" + str(cluster_counter)]))
+                mergef.write("\n")
+
         nlongread_coords = {}
         for lrid, lrc in lscaf.longread_coords.items():
             nlongread_coords[lrid] = lrc
@@ -499,6 +518,7 @@ class Scaffold:
                 print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mapping lengths (" + str(lscaf.get_ctg_len(ctg)) + "/" + str(rscaf.get_ctg_len(ctg)) + ") in the two scaffolds.")
         last_right_coord = 0
         nleft_coords = {}
+        nleft_coords_contig = {}
         nright_coords = {}
         norientation = {}
         ncontigset = self.contigset.copy()
@@ -573,6 +593,10 @@ class Scaffold:
         self.orientation = norientation
         Scaffold.nr_of_scaffolds -= 1
         for ctg in scaf2.contigset:
+            if ctg in same_ctgs:
+                self.left_coords_contig[ctg] = lscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] < rscaf.left_coords_contig[ctg] else rscaf.left_coords_contig[ctg]
+            else:
+                self.left_coords_contig[ctg] = scaf2.left_coords_contig[ctg]
             try:
                 contig2scaffold[ctg].remove(id(scaf2))
             except ValueError:
@@ -581,8 +605,8 @@ class Scaffold:
                 print(contig2scaffold[ctg])
             if id(self) not in contig2scaffold[ctg]:
                 contig2scaffold[ctg].append(id(self))
-        self.name = "cluster_" + str(clustercounter) 
-        clustercounter += 1
+        self.name = "cluster_" + str(cluster_counter) 
+        cluster_counter += 1
         del(scaffolds[id(scaf2)])
 
                 
@@ -1025,6 +1049,8 @@ clusternr = 0
 olen_scaf = len(scaffolds)+1
 while len(scaffolds)-olen_scaf != 0:
     olen_scaf = len(scaffolds)
+
+    
     for contig in contig2scaffold:
         if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
             scaf1 = scaffolds[contig2scaffold[contig][0]]
