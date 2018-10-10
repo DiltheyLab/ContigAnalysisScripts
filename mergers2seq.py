@@ -3,7 +3,8 @@ from Bio import SeqIO
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
-from graphviz import Digraph
+import graphviz as gv
+import networkx as nx
 
 
 parser = ArgumentParser()
@@ -20,23 +21,55 @@ extension	cluster_9	ab0cb3e0-e72a-4ac9-8d3d-f86cc2867a7e	239134	cluster_10
 """
 
 
-dot = Digraph(comment='Them clusters')
+dot = nx.DiGraph()
 
 with open(args.input) as f:
     for line in f:
-        [mode, node1, node2, distance, newnode] = line.split()
+        [modestring, node1, node2, distance, newnode] = line.split()
         if not node1.startswith("cluster"):
-            dot.node(node1, node1)
+            dot.add_node(node1)
         if not node2.startswith("cluster"):
-            dot.node(node2, node2)
-        dot.node(newnode, newnode)
-        dot.edge(node1,newnode)
-        dot.edge(node2,newnode)
+            dot.add_node(node2)
+        dot.add_node(newnode, mode = modestring)
+        dot.add_edge(node1,newnode, mode = modestring)
+        dot.add_edge(node2,newnode, mode = modestring)
+
+# delete a node
+node = "cluster_101"
+parents = list(dot.predecessors(node))
+children = list(dot.successors(node))
+child = children[0]
+print(parents)
+print(children)
+#for parent in parents:
+#    dot[parent]
+dot.remove_node(node)
+for parent in parents:
+    print(parent)
+    dot.add_edge(parent, child)
+    for item in dot.successors(parent):
+        print("child: " + str(item))
+
+# translate to dot and plot with graphviz
+dotgv = gv.Digraph(comment="clusters")
+for node in dot:
+    dotgv.node(node)
+    for edge in dot[node]:
+        dotgv.edge(node,edge)
+    
+dotgv.format = "svg"
+dotgv.render('clusters_reduced.gv', view=True)  # doctest: +SKIP
 
 
-print(dot.source)  # doctest: +NORMALIZE_WHITESPACE
+#for item in dot:
+#    for edge in dot[item]:
+#        print(dot[item][edge])
 
-dot.render('clusters.gv', view=True)  # doctest: +SKIP
+#print(nx.DiGraph.predecessors(dot["cluster_101"]))
+
+
+#for item in dot:
+#    print(item)
 
 
 
