@@ -274,9 +274,9 @@ if args.overwrite or not os.path.isfile(dm_path):
                         sr_dist = m1["ecr"] + (contigs[ctg1] - m1["ecc"]) + sr_distances[ctg1][ctg2] - (m2["scr"] - m2["scc"])
 
                         if lrs[1] in lr_dists[lrs[0]]:
-                            #curr_dist = np.mean(lr_dists[lrs[0]][lrs[1]][1])
-                            #if abs(sr_dist - curr_dist) > 2000:
-                            #    print("\t".join(["curr_dist: " + str(curr_dist), "sr_dist: " + str(sr_dist), "ctg1: " + ctg1, "ctg2: " + ctg2, lrs[0], lrs[1]]))
+                            curr_dist = np.mean(lr_dists[lrs[0]][lrs[1]][0])
+                            if abs(sr_dist - curr_dist) > 2000:
+                                print("\t".join(["curr_dist: " + str(curr_dist), "sr_dist: " + str(sr_dist), "ctg1: " + ctg1, "ctg2: " + ctg2, lrs[0], lrs[1]]))
                             lr_dists[lrs[0]][lrs[1]][1].append(sr_dist)
                         else:
                             #print(lrs[0] + " + " + lrs[1] + ": " + ctg1 + " " + ctg2)
@@ -294,33 +294,57 @@ else:
     with open(dm_path, 'rb') as f:
         lr_dists = pickle.load(f)
                         
+sys.exit(0)
     
+count1 = 0
+count2 = 0
 for lrid,lrdists in lr_dists.items():
     for lrid2,dists in lrdists.items():
-        if dists[0] == [] and len(dists[1]) > 1:
-            pass
+        if len(dists[1]) > 0:
+            count2 += 1
+        if len(dists[0]) > 0:
+            count1 += 1
             #print("interesting: " + str(lrid) + " " + str(lrid2) + " " + str(dists[1]))
         if len(dists[0]) > 1  and len(dists[1]) > 1:
             #if abs(np.mean(dists[0]) - np.mean(dists[1])) > 50:
             #    print("\t".join([str(lrid),str(lrid2),str(np.mean(dists[0])),  str(np.mean(dists[1]))]))
             if abs(np.mean(dists[0]) - np.mean(dists[1])) > 500:
-                print("\t".join([str(lrid),str(lrid2),str(np.mean(dists[0])),  str(np.mean(dists[1]))]))
-                print("\t".join(["","",str(dists[0]),  str(dists[1])]))
+                ##print("\t".join([str(lrid),str(lrid2),str(np.mean(dists[0])),  str(np.mean(dists[1]))]))
+                #print("\t".join(["","",str(dists[0]),  str(dists[1])]))
+                pass
+
+print("non-zero entries longreads: " + str(count1))
+print("non-zero entries shortreads : " + str(count2))
+
+print("length: " + str(len(lr_dists)))
 
 pp = PdfPages("foo.pdf")
 entries = 0
+nz_entries = 0
+maxv = 3000
 for lrid,lrdists in lr_dists.items():
     for lrid2,dists in lrdists.items():
-        entries += 1
-        if dists[1] != 0:
+        if len(dists[1]) > 0:
+            entries += 1
+            if entries % 1000 == 0:
+                print("entry: " + str(entries))
+            #nz_entries += 1
+            #print(str(entries) + "\t" + str(nz_entries))
             nm = np.mean(dists[1])
             distances = [x-nm for x in dists[1]]
+            for idx,distance in enumerate(distances):
+                if distance < -maxv:
+                    distances[idx] = -maxv
+                if distance > maxv:
+                    distances[idx] = maxv
+            
             plot1 = plt.figure()
-            plt.hist(distances, range(-2000, 2000, 200))
+            plt.hist(distances, range(-maxv, maxv+1, 250))
             pp.savefig(plot1)
-        if entries > 100:
-            pp.close()
-            sys.exit(0)
+            plt.close(plot1)
+        #    pp.close()
+        #    sys.exit(0)
+pp.close()
 
 
 #for lrid,dists in lr_dists.items():
