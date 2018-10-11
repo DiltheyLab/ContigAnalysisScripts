@@ -84,6 +84,25 @@ for node in dot.nodes:
 print(final_nodes[0])
 print(get_start_node(dot, final_nodes[0]))
     
+def suffix(path,offset):
+    suffix = []
+    for part, name in path:
+        if part[0] <= offset and part[1] > offset:
+            new_path.append((part[0],offset), name,(ctgs,ctge))
+            return new_path
+        elif part[0] > offset:
+            suffix.append(((part[0]-offset, part[1]-offset), name))
+    return suffix
+
+def find_path(g, n1, n2):
+    path = [((1,g.nodes[n1]["length"]),n1)]
+    while True:
+        current_node = move_to_extension(n1)
+        if current_node == n2:
+            return path
+        else:
+            path = n1
+
 # TODO
 '''
 find_path n1 n2:
