@@ -31,10 +31,17 @@ with open(args.input) as f:
         if not node2.startswith("cluster"):
             dot.add_node(node2)
         dot.add_node(newnode, mode = modestring)
-        dot.add_edge(node1,newnode, mode = modestring)
-        dot.add_edge(node2,newnode, mode = modestring)
+        dot.add_edge(node1, newnode)
+        dot.add_edge(newnode, node1, link = "left")
+        dot.add_edge(node2,newnode)
+        if modestring == "extension":
+            dot.add_edge(newnode, node2, link = "right")
+
+#print(dot.nodes["cluster_1"])
+#print(dot.nodes["653b2764-e21e-458a-99e4-702f7eac052a"])
 
 # delete a node
+"""
 node = "cluster_101"
 parents = list(dot.predecessors(node))
 children = list(dot.successors(node))
@@ -49,16 +56,64 @@ for parent in parents:
     dot.add_edge(parent, child)
     for item in dot.successors(parent):
         print("child: " + str(item))
+"""
+
+
+
+def get_start_node(g, end_node):
+    n = end_node
+    while True:
+        for node2, edge in g[n].items():
+            if "link" in edge and edge["link"] == "left":
+                n = node2
+                break
+        else:
+            return n
+
+
+# get final nodes
+final_nodes = []
+for node in dot.nodes:
+    for edge in dot[node]:
+        if "link" in dot[node][edge]:
+            continue
+        break
+    else:
+        final_nodes.append(node)
+
+print(final_nodes[0])
+print(get_start_node(dot, final_nodes[0]))
+    
+# TODO
+'''
+find_path n1 n2:
+    while not n2:
+    move to extension node e from n1
+    extension = suffix( find_path(get_start_node(e),e))
+    return n1
+'''
+
+def 
+
+
 
 # translate to dot and plot with graphviz
 dotgv = gv.Digraph(comment="clusters")
 for node in dot:
-    dotgv.node(node)
+    #print(node)
+    #print(dot[node])
+    if "mode" in (dot.nodes[node]) and dot.nodes[node]["mode"] == "extension":
+        dotgv.node(node, color = "red", style = "filled")
+    else:
+        dotgv.node(node)
+
     for edge in dot[node]:
         dotgv.edge(node,edge)
     
 dotgv.format = "svg"
-dotgv.render('clusters_reduced.gv', view=True)  # doctest: +SKIP
+dotgv.render('clusters_reduced.gv', view=False)  # doctest: +SKIP
+
+
 
 
 #for item in dot:
