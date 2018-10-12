@@ -486,7 +486,7 @@ class Scaffold:
         mode = "incorporation" if distance + rscaf.length < lscaf.length else "extension"
         if args.mergefile:
             with open(args.mergefile, "a+") as mergef:
-                mergef.write("\t".join([mode ,lscaf.name, rscaf.name, str(distance), "cluster_" + str(cluster_counter)]))
+                mergef.write("\t".join([mode ,lscaf.name, str(lscaf.length), rscaf.name, str(rscaf.length), str(distance), "cluster_" + str(cluster_counter)]))
                 mergef.write("\n")
 
         nlongread_coords = {}
