@@ -22,7 +22,7 @@ parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
-parser.add_argument("--blacklistfile", help="Blacklist File")
+parser.add_argument("--blacklist", help="Blacklist File")
 parser.add_argument("--overwrite", help="Overwrite preexisting distance matrix.", action = "store_true")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
@@ -91,8 +91,8 @@ sr_distances["582APD"].pop("635APD")
 #blacklist of long reads
 blacklist = {}
 complete_read = set()
-if args.blacklistfile:
-    with open(args.blacklistfile) as f:
+if args.blacklist:
+    with open(args.blacklist) as f:
         for line in f:
             idx, ctg =  line.strip().split()[0:2]
             
@@ -102,7 +102,7 @@ if args.blacklistfile:
                 blacklist[idx] = ctg
 
 
-dm_path = "/home/houwaart/Projects/ImmunoPore/APD/distance_matrix"
+dm_path = "/home/houwaart/Projects/ImmunoPore/APD/distance_matrix.pkl"
 # if distance matrix exists there is no need to calculate
 if args.overwrite or not os.path.isfile(dm_path):
                 
@@ -113,7 +113,7 @@ if args.overwrite or not os.path.isfile(dm_path):
             #sline = line.split()
             [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
             data = {"contig":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-            if args.blacklistfile:
+            if args.blacklist:
                 if rid in blacklist:
                     if blacklist[rid] == ctg:
                         continue
@@ -294,7 +294,6 @@ else:
     with open(dm_path, 'rb') as f:
         lr_dists = pickle.load(f)
                         
-sys.exit(0)
     
 count1 = 0
 count2 = 0
@@ -318,31 +317,45 @@ print("non-zero entries shortreads : " + str(count2))
 
 print("length: " + str(len(lr_dists)))
 
-pp = PdfPages("foo.pdf")
+pp = PdfPages("distances.pdf")
 entries = 0
 nz_entries = 0
 maxv = 3000
 for lrid,lrdists in lr_dists.items():
     for lrid2,dists in lrdists.items():
-        if len(dists[1]) > 0:
+        if lrid == lrid2:
+            continue 
+        if len(dists[1]) > 0 or len(dists[0]) > 0:
             entries += 1
             if entries % 1000 == 0:
                 print("entry: " + str(entries))
             #nz_entries += 1
             #print(str(entries) + "\t" + str(nz_entries))
             nm = np.mean(dists[1])
-            distances = [x-nm for x in dists[1]]
-            for idx,distance in enumerate(distances):
+            distances_sr = [x-nm for x in dists[1]]
+            nm_lr = np.mean(dists[0])
+            distances_lr = [x-nm_lr for x in dists[0]]
+            for idx,distance in enumerate(distances_sr):
                 if distance < -maxv:
-                    distances[idx] = -maxv
+                    distances_sr[idx] = -maxv
                 if distance > maxv:
-                    distances[idx] = maxv
+                    distances_sr[idx] = maxv
+            for idx,distance in enumerate(distances_lr):
+                if distance < -maxv:
+                    distances_lr[idx] = -maxv
+                if distance > maxv:
+                    distances_lr[idx] = maxv
             
             plot1 = plt.figure()
-            plt.hist(distances, range(-maxv, maxv+1, 250))
+            plt.subplot(1, 2, 1)
+            plt.hist(distances_sr, range(-maxv, maxv+1, 250))
+            plt.title(lrid + " +\n" + lrid2)
+            plt.xlabel("short_reads mean: " + '{0: >#016.1f}'.format((float(nm))))
+            plt.subplot(1, 2, 2)
+            plt.hist(distances_lr, range(-maxv, maxv+1, 250))
+            plt.xlabel("long_reads mean: " + '{0: >#016.1f}'.format((float(nm_lr))))
             pp.savefig(plot1)
             plt.close(plot1)
-        #    pp.close()
         #    sys.exit(0)
 pp.close()
 
