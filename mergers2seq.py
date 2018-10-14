@@ -28,16 +28,16 @@ with open(args.input) as f:
     for line in f:
         [modestring, node1, l1, node2, l2, distance, newnode] = line.split()
         if not node1.startswith("cluster"):
-            dot.add_node(node1, length = l1)
+            dot.add_node(node1, length = int(l1))
         if not node2.startswith("cluster"):
-            dot.add_node(node2, length = l2)
+            dot.add_node(node2, length = int(l2))
         dot.add_node(newnode, mode = modestring)
         dot.add_edge(node1, newnode, link = "down")
         dot.add_edge(newnode, node1, link = "left")
         dot.add_edge(node2, newnode, link = "down")
         dot.add_edge(newnode, node2, link = "right")
         if modestring == "extension":
-            new_length = distance + l2
+            new_length = int(distance) + int(l2)
         else:
             new_length = l1
         dot.nodes[newnode]["length"] = new_length
@@ -45,24 +45,6 @@ with open(args.input) as f:
 
 #print(dot.nodes["cluster_1"])
 #print(dot.nodes["653b2764-e21e-458a-99e4-702f7eac052a"])
-
-# delete a node
-"""
-node = "cluster_101"
-parents = list(dot.predecessors(node))
-children = list(dot.successors(node))
-child = children[0]
-print(parents)
-print(children)
-#for parent in parents:
-#    dot[parent]
-dot.remove_node(node)
-for parent in parents:
-    print(parent)
-    dot.add_edge(parent, child)
-    for item in dot.successors(parent):
-        print("child: " + str(item))
-"""
 
 
 
@@ -110,16 +92,36 @@ def go_right(g, n):
         print("Problem finding right neigbour")
         sys.exit(0)
 
+def go_left(g, n):
+    for n2 in g[n]:
+        if g[n][n2]["link"] == "left":
+            return n2
+    else:
+        print("Problem finding right neigbour")
+        sys.exit(0)
+
 def go_down(g, n):
     #print("going down from: " + n)
     for n2 in g[n]:
         if g[n][n2]["link"] == "down":
             return n2
     return n
+
+def get_suffix(path, dist, offset):
+    npath = []
+    for segment in path:
+        coords, name, seg_offset = segment
+        if coords[0] > dist:
+            npath.append(((int(coords[0]) + int(offset), int(coords[1]) + int(offset)), name, int(seg_offset)))
+        elif coords[0] <= dist and coords[1] >= dist:
+            #print("kk : ")
+            npath.append(((1 + int(offset), int(coords[1]) + int(offset)), name, int(seg_offset) + int(dist)))
+    return npath
+
                 
 def find_path(g, n1, n2):
     print("Finding path between " + n1 + " and " + n2)
-    path = [((1,g.nodes[n1]["length"]),n1, 0)]
+    path = [((1,int(g.nodes[n1]["length"])),n1, 0)]
     if n1 == n2:
         return path
     current_node = n1
@@ -127,9 +129,16 @@ def find_path(g, n1, n2):
         a =  move_to_extension(g, current_node, n2)
         if a:
             current_node = a
-            rn = go_right(g, current_node)
-            path.extend(find_path(g, get_start_node(g, rn) ,rn))
-            #print("still searching between 
+            rightn = go_right(g, current_node)
+            leftn = go_left(g, current_node)
+            nl = g.nodes[current_node]["length"] 
+            ol = g.nodes[leftn]["length"]
+            distance = int(nl) - int(ol)
+            print("Distanz: " + str(distance))
+            assert distance > 0
+            # here one could easily introduce more sophisticated merging via pairwise alignment
+            extension_path = get_suffix(find_path(g, get_start_node(g, rightn), rightn), distance, ol)
+            path.extend(extension_path)
         else:
             return path
 
@@ -158,7 +167,8 @@ print(final_nodes)
 
 #print(dot.nodes["cluster_1"]["mode"])
 easy_ones = [544, 543,701]
-for i in [697]:
+hard = [697]
+for i in hard:
     fn = "cluster_" + str(i)
     print("final node: " + fn)
     sn = get_start_node(dot, fn)
