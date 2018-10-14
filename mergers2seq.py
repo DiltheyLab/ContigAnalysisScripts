@@ -32,12 +32,12 @@ with open(args.input) as f:
         if not node2.startswith("cluster"):
             dot.add_node(node2, length = l2)
         dot.add_node(newnode, mode = modestring)
-        dot.add_edge(node1, newnode)
+        dot.add_edge(node1, newnode, link = "down")
         dot.add_edge(newnode, node1, link = "left")
-        dot.add_edge(node2,newnode)
+        dot.add_edge(node2, newnode, link = "down")
+        dot.add_edge(newnode, node2, link = "right")
         if modestring == "extension":
             new_length = distance + l2
-            dot.add_edge(newnode, node2, link = "right")
         else:
             new_length = l1
         dot.nodes[newnode]["length"] = new_length
@@ -69,26 +69,14 @@ for parent in parents:
 def get_start_node(g, end_node):
     n = end_node
     while True:
-        print("getting start node from: " + n)
+        #print("getting start node from: " + n)
         for node2, edge in g[n].items():
-            if "link" in edge and edge["link"] == "left":
+            if edge["link"] == "left":
                 n = node2
                 break
         else:
             return n
 
-
-# get final nodes
-final_nodes = []
-for node in dot.nodes:
-    for edge in dot[node]:
-        if "link" in dot[node][edge]:
-            continue
-        break
-    else:
-        final_nodes.append(node)
-
-    
 def suffix(path,offset):
     suffix = []
     for part, name in path:
@@ -102,24 +90,21 @@ def suffix(path,offset):
 # move to next extension node
 # up until n2 !!
 def move_to_extension(g, n1, n2):
-    print("Move to Extension " + n1 + " and " + n2)
-    current_node = go_down(g, n1)
+    #print("Move to Extension " + n1 + " and " + n2)
     #print("current_node: " + current_node)
-
-    while True:
+    current_node = n1
+    while current_node != n2:
+        current_node = go_down(g, current_node)
         #print(current_node + " is  current_node" )
-        if current_node == n2:
-            return current_node
         if "mode" in g.nodes[current_node] and g.nodes[current_node]["mode"] == "extension":
             print("extension found at node: " + current_node)
             return current_node
-        else:
-            current_node = go_down(g, current_node)
             #print("current_node: " + current_node)
+    return False
 
 def go_right(g, n):
     for n2 in g[n]:
-        if "link" in g[n][n2] and g[n][n2]["link"] == "right":
+        if g[n][n2]["link"] == "right":
             return n2
     else:
         print("Problem finding right neigbour")
@@ -128,13 +113,9 @@ def go_right(g, n):
 def go_down(g, n):
     #print("going down from: " + n)
     for n2 in g[n]:
-        if "link" in g[n][n2]:
-            continue
-        else:
+        if g[n][n2]["link"] == "down":
             return n2
-    else:
-        return n2
-                
+    return n
                 
 def find_path(g, n1, n2):
     print("Finding path between " + n1 + " and " + n2)
@@ -143,22 +124,48 @@ def find_path(g, n1, n2):
         return path
     current_node = n1
     while True:
-        current_node = move_to_extension(g, current_node, n2)
-        if "mode" in g.nodes[current_node] and g.nodes[current_node]["mode"] == "extension":
+        a =  move_to_extension(g, current_node, n2)
+        if a:
+            current_node = a
             rn = go_right(g, current_node)
-            path.append(find_path(g, get_start_node(g, rn) ,rn))
-        if current_node == n2:
+            path.extend(find_path(g, get_start_node(g, rn) ,rn))
+            #print("still searching between 
+        else:
             return path
 
-#print(dot.nodes)
-print(dot.nodes["cluster_1"]["mode"])
-print(final_nodes[0])
-sn = get_start_node(dot, final_nodes[0])
-print(dot["cluster_277"]["cluster_276"])
-print(dot.nodes["cluster_277"])
-print(dot.nodes["cluster_276"])
+
+# get final nodes
+final_nodes = []
+for node in dot.nodes:
+    #print("Getting final node for: " + node)
+    n1 = node
+    n2 = go_down(dot, n1)
+    while n1 != n2:
+        n1 = n2
+        n2 = go_down(dot, n2)
+    if n1 not in final_nodes:
+        final_nodes.append(n1)
+
+for node in final_nodes:
+    sn = get_start_node(dot, node)
+    dot.nodes[sn]["color"] = "green"
+
+    
+print(final_nodes)
 #sys.exit(0)
-print(find_path(dot, sn, final_nodes[0]))
+
+#print(dot.nodes)
+
+#print(dot.nodes["cluster_1"]["mode"])
+easy_ones = [544, 543,701]
+for i in [697]:
+    fn = "cluster_" + str(i)
+    print("final node: " + fn)
+    sn = get_start_node(dot, fn)
+    print("starts at: " + sn)
+    #sys.exit(0)
+    print(find_path(dot, sn, fn))
+
 
 # TODO
 '''
@@ -179,11 +186,16 @@ for node in dot:
     #print(dot[node])
     if "mode" in (dot.nodes[node]) and dot.nodes[node]["mode"] == "extension":
         dotgv.node(node, color = "red", style = "filled")
+    elif "color" in dot.nodes[node]:
+        dotgv.node(node, color = dot.nodes[node]["color"], style = "filled")
     else:
         dotgv.node(node)
 
     for edge in dot[node]:
-        dotgv.edge(node,edge)
+        if dot[edge][node]["link"] == "left":
+            dotgv.edge(node,edge, "l")
+        elif dot[node][edge]["link"] == "down":
+            dotgv.edge(node,edge)
     
 dotgv.format = "svg"
 dotgv.render('clusters_reduced.gv', view=False)  # doctest: +SKIP
