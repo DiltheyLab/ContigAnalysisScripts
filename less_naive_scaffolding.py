@@ -456,25 +456,17 @@ class Scaffold:
             return
         # This whole thing is not overly complicated but certainly tedious
         # First the scaffold that's more to the left is worked on, this is easier as coordinates don't change much in this scaffold
-
+        # So the left scaffold is needed which will be determined by the leftmost anchor
         lctg = sorted_same_ctgs1[0]
+        if self.right_coords[lctg] + self.right_coords_contig[lctg] < scaf2.right_coords[lctg] + scaf2.right_coords_contig[lctg]:
+            rscaf = self
+            lscaf = scaf2
+        else:
+            rscaf = scaf2
+            lscaf = self
+        
         # smaller means there is less DNA to the left so the scaffold is more right than the other, 
         # length of the contig is important when only part of the contig is mapped 
-        if self.is_on_left_edge(lctg) or scaf2.is_on_left_edge(lctg):
-            if self.left_coords[lctg] + self.get_ctg_len(lctg)  < scaf2.left_coords[lctg] + scaf2.get_ctg_len(lctg): 
-                lscaf = scaf2
-                rscaf = self
-            else:
-                lscaf = self
-                rscaf = scaf2
-        else:
-            if self.left_coords[lctg] < scaf2.left_coords[lctg]:
-                lscaf = scaf2
-                rscaf = self
-            else:
-                lscaf = self
-                rscaf = scaf2
-
         # This may be redundant and may have to get cleaned up later on.
         # The distance of the two longreads is needed.
         # As best guess the distance is taken that is given by the common contig
@@ -515,11 +507,13 @@ class Scaffold:
             lonedge = lsorted_ctgs[0] == ctg or lsorted_ctgs[-1] == ctg
             ronedge = rsorted_ctgs[0] == ctg or rsorted_ctgs[-1] == ctg
             if not (lonedge or ronedge or has_similar_mapping_length(lscaf, ctg, rscaf, ctg)):
-                print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mapping lengths (" + str(lscaf.get_ctg_len(ctg)) + "/" + str(rscaf.get_ctg_len(ctg)) + ") in the two scaffolds.")
+                pass
+                #print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mapping lengths (" + str(lscaf.get_ctg_len(ctg)) + "/" + str(rscaf.get_ctg_len(ctg)) + ") in the two scaffolds.")
         last_right_coord = 0
         nleft_coords = {}
         nleft_coords_contig = {}
         nright_coords = {}
+        nright_coords_contig = {}
         norientation = {}
         ncontigset = self.contigset.copy()
         last_common_ctg = "nope"
@@ -595,8 +589,10 @@ class Scaffold:
         for ctg in scaf2.contigset:
             if ctg in same_ctgs:
                 self.left_coords_contig[ctg] = lscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] < rscaf.left_coords_contig[ctg] else rscaf.left_coords_contig[ctg]
+                self.right_coords_contig[ctg] = lscaf.right_coords_contig[ctg] if lscaf.right_coords_contig[ctg] > rscaf.right_coords_contig[ctg] else rscaf.right_coords_contig[ctg]
             else:
                 self.left_coords_contig[ctg] = scaf2.left_coords_contig[ctg]
+                self.right_coords_contig[ctg] = scaf2.right_coords_contig[ctg]
             try:
                 contig2scaffold[ctg].remove(id(scaf2))
             except ValueError:
