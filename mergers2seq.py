@@ -8,6 +8,7 @@ import networkx as nx
 
 
 parser = ArgumentParser()
+parser.add_argument("mergefile", help="merge file, output of less_naive_scaffolding.py")
 parser.add_argument("input", help="fastq-inputfile")
 parser.add_argument("outfile", help="fasta-outputfile for scaffolds")
 
@@ -24,13 +25,15 @@ extension	cluster_9	280489	ab0cb3e0-e72a-4ac9-8d3d-f86cc2867a7e	104531	239134	cl
 
 dot = nx.DiGraph()
 
-with open(args.input) as f:
+with open(args.mergefile) as f:
     for line in f:
         [modestring, node1, l1, node2, l2, distance, newnode] = line.split()
         if not node1.startswith("cluster"):
-            dot.add_node(node1, length = int(l1))
+            dot.add_node(node1)
+            dot.nodes[node1]["length"] = int(l1)
         if not node2.startswith("cluster"):
-            dot.add_node(node2, length = int(l2))
+            dot.add_node(node2)
+            dot.nodes[node2]["length"] = int(l2)
         dot.add_node(newnode, mode = modestring)
         dot.add_edge(node1, newnode, link = "down")
         dot.add_edge(newnode, node1, link = "left")
@@ -39,14 +42,11 @@ with open(args.input) as f:
         if modestring == "extension":
             new_length = int(distance) + int(l2)
         else:
-            new_length = l1
+            new_length = int(l1)
         dot.nodes[newnode]["length"] = new_length
         
-
-#print(dot.nodes["cluster_1"])
-#print(dot.nodes["653b2764-e21e-458a-99e4-702f7eac052a"])
-
-
+print("cluster_660 len: " + str(dot.nodes["cluster_660"]["length"]))
+print("8a3dd len: " + str(dot.nodes["8a3dd374-8c36-4ceb-88ac-ff02534856d0"]["length"]))
 
 def get_start_node(g, end_node):
     n = end_node
@@ -59,27 +59,15 @@ def get_start_node(g, end_node):
         else:
             return n
 
-def suffix(path,offset):
-    suffix = []
-    for part, name in path:
-        if part[0] <= offset and part[1] > offset:
-            new_path.append((part[0],offset), name,(ctgs,ctge))
-            return new_path
-        elif part[0] > offset:
-            suffix.append(((part[0]-offset, part[1]-offset), name))
-    return suffix
-
 # move to next extension node
 # up until n2 !!
 def move_to_extension(g, n1, n2):
-    #print("Move to Extension " + n1 + " and " + n2)
-    #print("current_node: " + current_node)
     current_node = n1
     while current_node != n2:
         current_node = go_down(g, current_node)
         #print(current_node + " is  current_node" )
         if "mode" in g.nodes[current_node] and g.nodes[current_node]["mode"] == "extension":
-            print("extension found at node: " + current_node)
+            #print("extension found at node: " + current_node)
             return current_node
             #print("current_node: " + current_node)
     return False
@@ -97,11 +85,10 @@ def go_left(g, n):
         if g[n][n2]["link"] == "left":
             return n2
     else:
-        print("Problem finding right neigbour")
+        print("Problem finding left neigbour")
         sys.exit(0)
 
 def go_down(g, n):
-    #print("going down from: " + n)
     for n2 in g[n]:
         if g[n][n2]["link"] == "down":
             return n2
@@ -109,19 +96,21 @@ def go_down(g, n):
 
 def get_suffix(path, dist, offset):
     npath = []
+    print("path to be suffixed: " + str(path))
+    print("offset: " + str(offset))
+    print("dist: " + str(dist))
     for segment in path:
         coords, name, seg_offset = segment
-        if coords[0] > dist:
-            npath.append(((int(coords[0]) + int(offset), int(coords[1]) + int(offset)), name, int(seg_offset)))
-        elif coords[0] <= dist and coords[1] >= dist:
-            #print("kk : ")
-            npath.append(((1 + int(offset), int(coords[1]) + int(offset)), name, int(seg_offset) + int(dist)))
+        if int(coords[0]) + int(dist) > int(offset):
+            npath.append(((int(coords[0]) + int(dist) + 1, int(coords[1]) + int(dist) + 1), name, int(seg_offset)))
+        elif int(coords[0]) + int(dist) <= int(offset) and int(coords[1]) + int(dist) >= int(offset):
+            npath.append(((int(offset) + 1, int(dist) + int(coords[1]) ), name, int(seg_offset) + int(dist)))
     return npath
 
                 
 def find_path(g, n1, n2):
-    print("Finding path between " + n1 + " and " + n2)
-    path = [((1,int(g.nodes[n1]["length"])),n1, 0)]
+    #print("Finding path between " + n1 + " and " + n2)
+    path = [((0, int(g.nodes[n1]["length"] )), n1, 0)]
     if n1 == n2:
         return path
     current_node = n1
@@ -134,7 +123,6 @@ def find_path(g, n1, n2):
             nl = g.nodes[current_node]["length"] 
             ol = g.nodes[leftn]["length"]
             distance = int(nl) - int(ol)
-            print("Distanz: " + str(distance))
             assert distance > 0
             # here one could easily introduce more sophisticated merging via pairwise alignment
             extension_path = get_suffix(find_path(g, get_start_node(g, rightn), rightn), distance, ol)
@@ -159,35 +147,46 @@ for node in final_nodes:
     sn = get_start_node(dot, node)
     dot.nodes[sn]["color"] = "green"
 
-    
-print(final_nodes)
-#sys.exit(0)
+#print(final_nodes)
 
-#print(dot.nodes)
-
-#print(dot.nodes["cluster_1"]["mode"])
-easy_ones = [544, 543,701]
-hard = [697]
-for i in hard:
-    fn = "cluster_" + str(i)
+easy_ones = ["cluster_544", "cluster_543", "cluster_701"]
+hard = ["cluster_697"]
+hard = ["cluster_706"]
+easy = ["cluster_660"]
+paths = {}
+for i in easy:
+    #fn = "cluster_" + str(i)
+    fn = i
     print("final node: " + fn)
     sn = get_start_node(dot, fn)
     print("starts at: " + sn)
     #sys.exit(0)
-    print(find_path(dot, sn, fn))
+    solpath = find_path(dot, sn, fn)
+    print(solpath)
+    paths[fn] = solpath
+
+#sys.exit(0)
+
+print("Loading sequences ... ") 
+lrs = {}
+with open(args.input) as f:
+    for i, line in enumerate(f):
+        if i % 4 == 0:
+            lrid = line.split(" ")[0][1:]
+        elif i % 4 == 1:
+            lrs[lrid] = line.rstrip()
+    
+print("done")
 
 
-# TODO
-'''
-find_path n1 n2:
-    while not n2:
-    move to extension node e from n1
-    extension = suffix( find_path(get_start_node(e),e))
-    return n1
-'''
 
-
-
+# on to the meat
+with open(args.outfile, "w") as f:
+    for i, path in paths.items():
+        f.write(">" + i + "\n")
+        for segment in path:
+            f.write(lrs[segment[1]][segment[2]:])
+        f.write("\n")
 
 # translate to dot and plot with graphviz
 dotgv = gv.Digraph(comment="clusters")
@@ -209,8 +208,6 @@ for node in dot:
     
 dotgv.format = "svg"
 dotgv.render('clusters_reduced.gv', view=False)  # doctest: +SKIP
-
-
 
 
 #for item in dot:
