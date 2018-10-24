@@ -41,6 +41,7 @@ with open(args.mergefile) as f:
         dot.add_edge(newnode, node2, link = "right")
         if modestring == "extension":
             new_length = int(distance) + int(l2)
+            dot.nodes[newnode]["distance"] = int(distance)
         else:
             new_length = int(l1)
         dot.nodes[newnode]["length"] = new_length
@@ -94,40 +95,51 @@ def go_down(g, n):
             return n2
     return n
 
-def get_suffix(path, dist, offset):
+def get_suffix(path, nl, ol, dist):
+    global depth
     npath = []
-    print("path to be suffixed: " + str(path))
-    print("offset: " + str(offset))
-    print("dist: " + str(dist))
+    print("\t"* depth + "path to be suffixed: " + str(path))
+    print("\t"* depth + "nl: " + str(nl) + " ol: " + str(ol) + " dist: " + str(dist))
+    #print("offset: " + str(offset))
+    #print("extension_length: " + str(extension_length))
     for segment in path:
         coords, name, seg_offset = segment
-        if int(coords[0]) + int(dist) > int(offset):
+        if int(coords[0]) + int(dist) > int(ol):
             npath.append(((int(coords[0]) + int(dist) + 1, int(coords[1]) + int(dist) + 1), name, int(seg_offset)))
-        elif int(coords[0]) + int(dist) <= int(offset) and int(coords[1]) + int(dist) >= int(offset):
-            npath.append(((int(offset) + 1, int(dist) + int(coords[1]) ), name, int(seg_offset) + int(dist)))
+        elif int(coords[0]) + int(dist) <= int(ol) and int(coords[1]) + int(dist) >= int(ol):
+            seg_length = coords[1]-coords[0]
+            seg_offset = seg_offset + (ol - (dist + coords[0]))
+            nseg_length = seg_length - (ol - (dist + coords[0]))
+            npath.append(((int(ol) + 1, ol+ nseg_length + 1) , name, seg_offset))
     return npath
 
+depth = -1
                 
 def find_path(g, n1, n2):
-    #print("Finding path between " + n1 + " and " + n2)
+    global depth
+    depth += 1
+    print("\t"*depth + "Finding path between " + n1 + " and " + n2)
     path = [((0, int(g.nodes[n1]["length"] )), n1, 0)]
     if n1 == n2:
+        depth -= 1
         return path
     current_node = n1
     while True:
         a =  move_to_extension(g, current_node, n2)
         if a:
+            print("\t"*depth + "extension found: " + a)
             current_node = a
             rightn = go_right(g, current_node)
             leftn = go_left(g, current_node)
             nl = g.nodes[current_node]["length"] 
+            dist = g.nodes[current_node]["distance"] 
             ol = g.nodes[leftn]["length"]
-            distance = int(nl) - int(ol)
-            assert distance > 0
+            #extension_length = int(nl) - int(ol)
             # here one could easily introduce more sophisticated merging via pairwise alignment
-            extension_path = get_suffix(find_path(g, get_start_node(g, rightn), rightn), distance, ol)
+            extension_path = get_suffix(find_path(g, get_start_node(g, rightn), rightn), nl, ol, dist)
             path.extend(extension_path)
         else:
+            depth -= 1
             return path
 
 
@@ -151,10 +163,11 @@ for node in final_nodes:
 
 easy_ones = ["cluster_544", "cluster_543", "cluster_701"]
 hard = ["cluster_697"]
-hard = ["cluster_706"]
-easy = ["cluster_660"]
+hard = ["cluster_552"]
+easy = ["cluster_679"]
 paths = {}
-for i in easy:
+#for i in easy:
+for i in final_nodes:
     #fn = "cluster_" + str(i)
     fn = i
     print("final node: " + fn)
@@ -165,6 +178,7 @@ for i in easy:
     print(solpath)
     paths[fn] = solpath
 
+print(paths["cluster_679"])
 #sys.exit(0)
 
 print("Loading sequences ... ") 
@@ -183,9 +197,14 @@ print("done")
 # on to the meat
 with open(args.outfile, "w") as f:
     for i, path in paths.items():
+        last_end = 0
         f.write(">" + i + "\n")
         for segment in path:
+            if segment[0][0] > int(last_end) + 1:
+                f.write("N" * int((segment[0][0] - last_end)))
+                print(str(i) + " Ns: " + str(segment[0][0] - last_end))
             f.write(lrs[segment[1]][segment[2]:])
+            last_end = segment[0][1]
         f.write("\n")
 
 # translate to dot and plot with graphviz
