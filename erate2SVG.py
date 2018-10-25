@@ -219,6 +219,7 @@ for lrs in combinations(ogreads.keys(), 2):
         lr_dists[lrs[1]][lrs[0]]=-dists[0]
 
             
+sorted_reads = {}
 for cluster in creads:
     #print(creads[cluster].keys())
     # find leftmost read 
@@ -256,10 +257,14 @@ for cluster in creads:
         if lr_dists[srid][rid2] < smval:
             smval = lr_dists[srid][rid2]
             nsrid = rid2
+    
+    sorted_reads[cluster] = sorted(creads[cluster].keys(), key=lambda x: lr_dists[srid][x])
 
-    # rid should be smallest
-    creads[cluster]["smallest_id"] = srid
+
+    # store resulsts of this
+    creads[cluster]["smallest_id"] = srid #for this id all values are present in lr_dists
     creads[cluster]["smallest_offset"] = -smval
+
 #sys.exit(0)
 
 
@@ -268,10 +273,11 @@ ypos = 0
 xtext = 10
 xpad = 200
 ypad = 10
-dwg = svgwrite.Drawing(args.output, size=(u'1700', u'4600'), profile='full')
+dwg = svgwrite.Drawing(args.output, size=(u'4000', u'10000'), profile='full')
 csize = 0
 for cluster in creads:
-    for rid,read in creads[cluster].items():
+    #for rid,read in creads[cluster].items():
+    for rid in sorted_reads[cluster]:
         if rid.startswith("small"):
             continue
         if args.alignreads:
@@ -307,7 +313,7 @@ for cluster in creads:
             elif read["strand"] == 1:
                 direction = "<"
             dwg.add(dwg.text(direction, insert=(xpad+(xoffset+sc)/100,ypad+ypos+2),style="font-size:6"))
-    dwg.add(dwg.line((10, ypad+ypos+10), ( 1000, ypad+ypos+10), stroke=svgwrite.rgb(0, 0, 0, '%')))
+    dwg.add(dwg.line((10, ypad+ypos+10), ( 10000, ypad+ypos+10), stroke=svgwrite.rgb(0, 0, 0, '%')))
 
 
 dwg.save()
