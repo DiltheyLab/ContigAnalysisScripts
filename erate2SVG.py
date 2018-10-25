@@ -4,37 +4,52 @@ from operator import itemgetter
 import sys
 
 
+
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("--whitelist", help="Only plot long reads with ids found in this whitelist file.")
+parser.add_argument("--blacklist", help="Do not plot long reads in this file.")
+parser.add_argument("--alignreads", action="store_true", help="Reads will be turned around if necessary and aligned according to their distances.")
 parser.add_argument("cellline", help="Name of the cellline")
 parser.add_argument("output", help="SVG output file")
 
 args = parser.parse_args()
 
-
-reads = {}
+lreads ={}
 greads = {}
 cgreads = []
+
+#blacklist of long reads
+blacklist = {}
+if args.blacklist:
+    with open(args.blacklist) as f:
+        for line in f:
+            idx, ctg =  line.strip().split()[0:2]
+            blacklist[idx] = ctg
 
 # nanopore read info
 with open(args.efile) as f:
     for line in f:
-        sline = line.split()
-        rid = sline[0]
-        ctg = sline[1]
-        strand = sline[8]
-        sc = int(sline[5])
-        ec = int(sline[6])
-        sc_c = int(sline[9])
-        ec_c = int(sline[10])
-        c_l = int(sline[11])
-        if rid in reads:
-            reads[rid]["overlaps"].append([ctg,strand,sc,ec,sc_c,ec_c,c_l])
+        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+        data = {"contig":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+        if args.blacklist:
+            if rid in blacklist:
+                if blacklist[rid] == "all":
+                    continue
+                elif blacklist[rid] == ctg:
+                    continue
+        if rid in lreads:
+            lreads[rid]["maps"].append(data)
+            if int(ecr) > lreads[rid]["rm_ecr"]:
+                lreads[rid]["rm_ecr"] = int(ecr)
+            if int(scr) < lreads[rid]["lm_scr"]:
+                lreads[rid]["lm_scr"] = int(scr)
         else:
-            reads[rid] = {}
-            reads[rid]["length"] = int(sline[7])
-            reads[rid]["overlaps"] = [[ctg,strand,sc,ec,sc_c,ec_c,c_l]]
+            lreads[rid] = {}
+            lreads[rid]["length"] = int(lenr)
+            lreads[rid]["maps"] = [data]
+            lreads[rid]["rm_ecr"] = int(ecr)
+            lreads[rid]["lm_scr"] = int(scr)
 
 # get interesting reads
 greadst = {}
@@ -42,21 +57,21 @@ intreads = {}
 greads_contigset = set()
 intreads_contigset = set()
 
-for rid in reads:
+for rid, read in lreads.items():
     counter = 0
-    for item in reads[rid]["overlaps"]:
-        if item[0].endswith(args.cellline):
+    for item in read["maps"]:
+        if item["contig"].endswith(args.cellline):
             counter += 1
     if counter >= 2:
-        greadst[rid] = reads[rid]
-        for item in reads[rid]["overlaps"]:
-            if item[0].endswith(args.cellline):
-                greads_contigset.add(item[0])
+        greadst[rid] = read
+        for item in read["maps"]:
+            if item["contig"].endswith(args.cellline):
+                greads_contigset.add(item["contig"])
     if counter == 1:
-        intreads[rid] = reads[rid]
-        for item in reads[rid]["overlaps"]:
-            if item[0].endswith(args.cellline):
-                intreads_contigset.add(item[0])
+        intreads[rid] = read
+        for item in read["maps"]:
+            if item["contig"].endswith(args.cellline):
+                intreads_contigset.add(item["contig"])
             
 intersection = greads_contigset.intersection(intreads_contigset)
 sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.cellline)))
@@ -64,19 +79,19 @@ sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.cellline)
 
 
 for rid in intreads:
-    if len(intreads[rid]["overlaps"]) == 1:
+    if len(intreads[rid]["maps"]) == 1:
         pass
         #print("\t".join([rid, str(intreads[rid])]))
         
 
 # sort contigs by left coordinate
 for rid in greadst:
-    soverlaps = sorted(reads[rid]["overlaps"], key = itemgetter(2))
-    #print(reads[rid]["overlaps"])
+    soverlaps = sorted(lreads[rid]["maps"], key = itemgetter("scr"))
     greads[rid] = greadst[rid]
-    greads[rid]["overlaps"]=soverlaps
+    greads[rid]["maps"]=soverlaps
 
 ogreads = greads.copy()
+print("lgnth: " + str(len(greadst)))
 
 
 # cluster np-reads or only keep whitelisted ones
@@ -90,7 +105,7 @@ if(args.whitelist):
             
     creads[0] = {}
     for rid,read in greads.items():
-        for mapping in read["overlaps"]:
+        for mapping in read["maps"]:
             if mapping[0] in whitelist:
                 creads[0][rid] = read
 else:
@@ -105,14 +120,14 @@ else:
         olen = 0
         while len(current_cluster) != olen:
             olen = len(current_cluster)
-            for contig in cr[1]["overlaps"]:
-                if not contig[0].startswith("chr"):
-                    current_contigs.add(contig[0])
+            for contig in cr[1]["maps"]:
+                if not contig["contig"].startswith("chr"):
+                    current_contigs.add(contig["contig"])
             #print("contigs: " + str(current_contigs))
             for readid,readval in greads.items():
                 contig_found = False
-                for contig in readval["overlaps"]:
-                    if contig[0] in current_contigs:
+                for contig in readval["maps"]:
+                    if contig["contig"] in current_contigs:
                         contig_found = True
                         current_cluster[readid] = readval
                         cr = (readid, greads.pop(readid))
@@ -122,7 +137,6 @@ else:
             
         print("cluster length: " + str(len(current_cluster)))
         creads[clusternr] = current_cluster
-
 
 
 # draw interesting reads
@@ -144,11 +158,11 @@ for cluster in creads:
         dwg.add(dwg.line((xpad, ypad+ypos), ( xpad + ogreads[rid[0]]["length"]/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True
         col = "black"
-        for read in ogreads[rid[0]]["overlaps"]:
+        for read in ogreads[rid[0]]["maps"]:
             #print(read)
-            sc = read[2]
-            ec = read[3]
-            ctg = read[0].rstrip(args.cellline)
+            sc = read["scr"]
+            ec = read["ecr"]
+            ctg = read["contig"].rstrip(args.cellline)
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctg = ctg[0:8]
@@ -163,9 +177,9 @@ for cluster in creads:
                 yt = ypad+ypos+7
             above = not above
             dwg.add(dwg.text(ctg, insert=(xpad+sc/100,yt),fill=col, style="font-size:4"))
-            if read[1] == "0":
+            if read["strand"] == 0:
                 direction = ">"
-            elif read[1] == "1":
+            elif read["strand"] == 1:
                 direction = "<"
             dwg.add(dwg.text(direction, insert=(xpad+sc/100,ypad+ypos+2),style="font-size:6"))
     dwg.add(dwg.line((10, ypad+ypos+10), ( 1000, ypad+ypos+10), stroke=svgwrite.rgb(0, 0, 0, '%')))
