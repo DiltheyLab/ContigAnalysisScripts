@@ -26,7 +26,7 @@ parser.add_argument("--blacklist", help="Blacklist File")
 parser.add_argument("--overwrite", help="Overwrite preexisting distance matrix.", action = "store_true")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
-parser.add_argument("--mincontigs", help="Minimal number of contigs for long read to be considered", type=int, default=2)
+parser.add_argument("--mincontigs", help="Minimal number of contigs for long read to be considered", type=int, default=1)
 parser.add_argument("--unwanted_contigs", help="If given the contigs in this file will not be considered.")
 
 args = parser.parse_args()
@@ -256,7 +256,7 @@ if args.overwrite or not os.path.isfile(dm_path):
                 ndists.append(-d)
             lr_dists[lrs[1]][lrs[0]] = (ndists, [])
             stdev = (np.std(dists))
-            if stdev < 50:
+            if stdev > 500:
                 show_distances(lr1, lr2, lrs[0], lrs[1], common_ctgs)
                 #print("-" * 200)
                 #print(lrs[0]  + " + " + lrs[1])
@@ -317,47 +317,6 @@ print("non-zero entries shortreads : " + str(count2))
 
 print("length: " + str(len(lr_dists)))
 
-pp = PdfPages("distances.pdf")
-entries = 0
-nz_entries = 0
-maxv = 3000
-for lrid,lrdists in lr_dists.items():
-    for lrid2,dists in lrdists.items():
-        if lrid == lrid2:
-            continue 
-        if len(dists[1]) > 0 or len(dists[0]) > 0:
-            entries += 1
-            if entries % 1000 == 0:
-                print("entry: " + str(entries))
-            #nz_entries += 1
-            #print(str(entries) + "\t" + str(nz_entries))
-            nm = np.mean(dists[1])
-            distances_sr = [x-nm for x in dists[1]]
-            nm_lr = np.mean(dists[0])
-            distances_lr = [x-nm_lr for x in dists[0]]
-            for idx,distance in enumerate(distances_sr):
-                if distance < -maxv:
-                    distances_sr[idx] = -maxv
-                if distance > maxv:
-                    distances_sr[idx] = maxv
-            for idx,distance in enumerate(distances_lr):
-                if distance < -maxv:
-                    distances_lr[idx] = -maxv
-                if distance > maxv:
-                    distances_lr[idx] = maxv
-            
-            plot1 = plt.figure()
-            plt.subplot(1, 2, 1)
-            plt.hist(distances_sr, range(-maxv, maxv+1, 250))
-            plt.title(lrid + " +\n" + lrid2)
-            plt.xlabel("short_reads mean: " + '{0: >#016.1f}'.format((float(nm))))
-            plt.subplot(1, 2, 2)
-            plt.hist(distances_lr, range(-maxv, maxv+1, 250))
-            plt.xlabel("long_reads mean: " + '{0: >#016.1f}'.format((float(nm_lr))))
-            pp.savefig(plot1)
-            plt.close(plot1)
-        #    sys.exit(0)
-pp.close()
 
 
 #for lrid,dists in lr_dists.items():
@@ -366,13 +325,6 @@ pp.close()
 #    print(dists)
 
         
-devs = []
-for dists in all_dists:
-    stdev = (np.std(dists))
-    if stdev < 50:
-        pass
-#        print(dists)
-    devs.append(stdev)
 
 # and now let's build a simple matrix
 # taking an arbitrary but fixed ordering
@@ -413,8 +365,64 @@ while unvisited_nodes:
         current_index += 1
     print(current_cluster)
     
+#sys.exit(0)
 
 # get pairs of overlapping reads
 #plt.hist(devs,150)
 #plt.yscale('log', nonposy='clip')
 #plt.show()
+
+pp = PdfPages("distances.pdf")
+entries = 0
+nz_entries = 0
+maxv = 3000
+for lrid,lrdists in lr_dists.items():
+    for lrid2,dists in lrdists.items():
+        if lrid == lrid2:
+            continue 
+        if len(dists[1]) > 0 or len(dists[0]) > 0:
+            entries += 1
+            if entries % 1000 == 0:
+                print("entry: " + str(entries))
+            #nz_entries += 1
+            #print(str(entries) + "\t" + str(nz_entries))
+            nm = np.mean(dists[1])
+            distances_sr = [x-nm for x in dists[1]]
+            nm_lr = np.mean(dists[0])
+            distances_lr = [x-nm_lr for x in dists[0]]
+            for idx,distance in enumerate(distances_sr):
+                if distance < -maxv:
+                    distances_sr[idx] = -maxv
+                if distance > maxv:
+                    distances_sr[idx] = maxv
+            for idx,distance in enumerate(distances_lr):
+                if distance < -maxv:
+                    distances_lr[idx] = -maxv
+                if distance > maxv:
+                    distances_lr[idx] = maxv
+            
+            plot1 = plt.figure()
+            #plt.subplot(1, 3, 1)
+            #plt.hist(distances_sr, range(-maxv, maxv+1, 250))
+            #plt.title(lrid + " +\n" + lrid2)
+            label = "short_reads mean: " + '{0: >#016.1f}'.format((float(nm)))
+            #plt.xlabel(label)
+            #plt.subplot(1, 3, 2)
+            #plt.hist(distances_lr, range(-maxv, maxv+1, 250))
+            label += "\nlong_reads mean: " + '{0: >#016.1f}'.format((float(nm_lr)))
+            plt.xlabel(label)
+            #plt.subplot(1, 3, 3)
+            plt.hist(distances_lr, range(-maxv, maxv+1, 250), alpha = 0.4)
+            plt.hist(distances_sr, range(-maxv, maxv+1, 250), alpha = 0.4)
+            #plt.xlabel("long_reads mean: " + '{0: >#016.1f}'.format((float(nm_lr))))
+            pp.savefig(plot1)
+            plt.close(plot1)
+        #    sys.exit(0)
+pp.close()
+devs = []
+for dists in all_dists:
+    stdev = (np.std(dists))
+    if stdev < 50:
+        pass
+#        print(dists)
+    devs.append(stdev)
