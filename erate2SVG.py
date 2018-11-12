@@ -29,10 +29,27 @@ if args.blacklist:
             idx, ctg =  line.strip().split()[0:2]
             blacklist[idx] = ctg
 
-# nanopore read info
+'''
+cluster_706	231799	48432	57361	+	505APD	9129	22	9069	3965	9177	200	tp:A:P	cm:i:477	s1:i:3924	s2:i:0	dv:f:0.0836
+cluster_706	231799	77916	86702	-	505APD	9129	187	9105	3991	9087	200	tp:A:P	cm:i:477	s1:i:3921	s2:i:0	dv:f:0.0812
+cluster_706	231799	213763	220432	+	472APD	7054	14	6711	3767	6805	200	tp:A:P	cm:i:494	s1:i:3749	s2:i:0	dv:f:0.0585
+'''
+
+#paf = True
+paf = False
+
+# paf format 
 with open(args.efile) as f:
     for line in f:
-        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+        if paf:
+            [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
+            #print(strandstring)
+            if strandstring == "+":
+                strand = 0
+            else:
+                strand = 1
+        else:
+            [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
         data = {"contig":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
         if args.blacklist:
             if rid in blacklist:
@@ -85,7 +102,8 @@ for rid in intreads:
         pass
         #print("\t".join([rid, str(intreads[rid])]))
         
-# turn reads around
+
+greadst.update(intreads)
 
 # turn reads around if necessary
 for rid, lr in greadst.items():
@@ -284,7 +302,7 @@ for cluster in creads:
             xoffset = creads[cluster]["smallest_offset"] + lr_dists[creads[cluster]["smallest_id"]][rid]
         else:
             xoffset = 0
-        ypos += 20
+        ypos += 16
         dwg.add(dwg.text(rid, insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
         dwg.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+ogreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True
@@ -313,7 +331,8 @@ for cluster in creads:
             elif read["strand"] == 1:
                 direction = "<"
             dwg.add(dwg.text(direction, insert=(xpad+(xoffset+sc)/100,ypad+ypos+2),style="font-size:6"))
-    dwg.add(dwg.line((10, ypad+ypos+10), ( 10000, ypad+ypos+10), stroke=svgwrite.rgb(0, 0, 0, '%')))
+    dwg.add(dwg.line((10, ypad+ypos+8), ( 10000, ypad+ypos+10), stroke=svgwrite.rgb(0, 0, 0, '%')))
+    ypos += 6
 
 
 dwg.save()

@@ -9,12 +9,14 @@ from itertools import combinations, cycle
 import svgwrite
 #import logging
 #from logging import info
+import squarify
 
 #logging.basicConfig(filename='mergers.log',level=logging.INFO)
 
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
+parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
@@ -926,20 +928,30 @@ class Scaffold:
     
     #add_seq_info(self):
 
+'''
+33f66128-053b-4c39-bdce-b31ec9f99e14	1470	475	845	-	1477SSTO	406	3	379	208	380	29	tp:A:P	cm:i:22	s1:i:207	s2:i:165	dv:f:0.0722
+33f66128-053b-4c39-bdce-b31ec9f99e14	1470	821	1157	-	1477SSTO	406	41	405	180	364	0	tp:A:S	cm:i:21	s1:i:175	dv:f:0.0630
+33f66128-053b-4c39-bdce-b31ec9f99e14	1470	298	458	-	1477SSTO	406	18	174	111	161	19	tp:A:P	cm:i:12	s1:i:110	s2:i:93	dv:f:0.0541
+b98869c8-a58d-4efd-8a60-b4d8f262764a	3625	1344	1724	+	1477SSTO	406	3	379	282	380	38	tp:A:P	cm:i:33	s1:i:282	s2:i:203	dv:f:0.0387
+'''
 # nanopore read info
 with open(args.efile) as f:
     for line in f:
-        sline = line.split()
-        rid = sline[0]
-        ctg = sline[1]
-        strand = int(sline[8])
-        scr = int(sline[5])
-        ecr = int(sline[6])
-        lenr = int(sline[7])
-        scc = int(sline[9])
-        ecc = int(sline[10])
-        lenc = int(sline[11])
-        payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lenc":lenc}
+        if (args.paf):
+            [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc] = line.split()[0:9]
+            strand = 0 if strandstring == "+" else 1
+        else:
+            sline = line.split()
+            rid = sline[0]
+            ctg = sline[1]
+            strand = int(sline[8])
+            scr = int(sline[5])
+            ecr = int(sline[6])
+            lenr = int(sline[7])
+            scc = int(sline[9])
+            ecc = int(sline[10])
+            lenc = int(sline[11])
+        payload = {"contig":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
         if rid in blacklist:
             if blacklist[rid] == ctg:
                 continue
@@ -949,7 +961,7 @@ with open(args.efile) as f:
             reads[rid]["maps"].append(payload)
         else:
             reads[rid] = {}
-            reads[rid]["length"] = int(sline[7])
+            reads[rid]["length"] = int(lenr)
             reads[rid]["maps"] = [payload]
 
 scaffolds = {}
@@ -1056,6 +1068,26 @@ while len(scaffolds)-olen_scaf != 0:
 
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
+def stringify(nr):
+    if nr >= 1000000:
+        return "{:.1f}".format(nr/1000000) + " M"
+    elif nr >= 10000:
+        return "{:.0f}".format(nr/1000) + " k"
+    elif nr > 1000:
+        return "{:.1f}".format(nr/1000) + " k"
+    else:
+        return str(nr)
+
+lr_lengths = []
+lr_lengths.append([])
+lr_lengths.append([])
+for scaf in scaffolds.values():
+    lr_lengths[1].append(scaf.length)
+    lr_lengths[0].append(stringify(scaf.length))
+    #lr_lengths[0].append(scaf.name)
+    #print("length of scaffold " + scaf.name + ": " + str(scaf.length))
+
+
 def is_rightmost(ctg):
     try:
         assert(len(contig2scaffold[ctg]) == 1)
@@ -1125,10 +1157,28 @@ if args.summaryfile:
         
 
 # Draw all scaffolds
+lrsr_lengths = []
+lrsr_lengths.append([])
+lrsr_lengths.append([])
 for scaf in scaffolds.values():
+    lrsr_lengths[1].append(scaf.length)
+    #lrsr_lengths[0].append(scaf.name)
+    lrsr_lengths[0].append(stringify(scaf.length))
+    #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
     yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
 
 dwg.save()
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
+plt.subplot(121)
+squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9 )
+#squarify.plot(sizes=lr_lengths[1], alpha=.9 )
+plt.axis('off')
+plt.title('after long read scaffolding')
+plt.subplot(122)
+squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
+#squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
+plt.axis('off')
+plt.title('after long + short read scaffolding')
+plt.show()
 sys.exit(0)
