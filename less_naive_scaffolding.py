@@ -13,7 +13,6 @@ import squarify
 
 #logging.basicConfig(filename='mergers.log',level=logging.INFO)
 
-
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
@@ -29,7 +28,6 @@ parser.add_argument("--mindepth", help="Minimal depth", type=int, default=25)
 
 args = parser.parse_args()
 
-
 reads = {}
 greads = {}
 contigs = {}
@@ -38,6 +36,10 @@ contig2scaffold = {}
 cluster_counter = 1
 
 srneighs = dict()
+
+if args.mergefile:
+    with open(args.mergefile, "w+") as mergef:
+       pass 
 
 def get_other_relpos(relpos):
     if relpos == "left":
@@ -89,22 +91,25 @@ if args.summaryfile:
                         add_neighs(ctg2,ctg1,"left",dist)
 
 # some custom additions
-add_neighs("224APD","976APD","right",16.67)
-add_neighs("916APD","1247APD","right",116.8)
-add_neighs("2406APD","1671APD","right",52.3)
-add_neighs("105APD","726APD","right",-40.1)
-add_neighs("726APD","1674APD","right",304.0)
-add_neighs("2080APD","2377APD","right",361.9)
-add_neighs("2377APD","928APD","right",75.6)
-add_neighs("504APD", "49APD","right",-460.3)
-add_neighs("49APD","116APD","right",-4.8)
+add_neighs("224APD","976APD","right",round(16.67))
+add_neighs("916APD","1247APD","right",round(116.8))
+add_neighs("2406APD","1671APD","right",round(52.3))
+add_neighs("105APD","726APD","right",round(-40.1))
+add_neighs("726APD","1674APD","right",round(304.0))
+add_neighs("2080APD","2377APD","right",round(361.9))
+add_neighs("2377APD","928APD","right",round(75.6))
+add_neighs("504APD", "49APD","right",round(-460.3))
+add_neighs("49APD","116APD","right",round(-4.8))
 
 blacklist = {}
 blacklist_fullread = set()
+blacklist_contigs = set()
 if args.blacklistfile:
     with open(args.blacklistfile) as f:
         for line in f:
             sline = line.split()
+            if sline[0] == "contig":
+                blacklist_contigs.add(sline[1])
             if sline[1] == "all":
                 blacklist_fullread.add(sline[0])
             else:
@@ -153,7 +158,7 @@ class Scaffold:
         Scaffold.nr_of_scaffolds += 1
         self.contigset = set()
         self.contigset_sr = set()
-        #self.turned_around = False
+        self.turned_around = False
         #lr_info[lr[0]] = lr[1]
 
     
@@ -230,6 +235,11 @@ class Scaffold:
         sortedcontigs = sorted(ctgset, key = lambda item: self.right_coords[item])
         return(sortedcontigs[-1])
 
+    # length that takes into account that the end of the scaffold could be extended by a mapping contig
+    def get_virtual_length(self):
+        rctg = self.get_rightmost_contig()
+        rest =  allcontigs[rctg] - self.right_coords_contig[rctg]
+        return max(self.length ,self.right_coords[rctg] + rest)
 
     def find_conflicts(self,max_dist):
         sortedcontigs = sorted(self.contigset, key = lambda item: self.left_coords[item])
@@ -299,6 +309,8 @@ class Scaffold:
             img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
         return ypos+7
 
+    # use only when sr_contigs are added
+    # long reads can be longer even after contigs are added
     def set_new_length(self):
         for ctg, coord in self.right_coords.items():
             if self.length < coord:
@@ -333,20 +345,32 @@ class Scaffold:
         self.set_new_length()
 
     def add_short_read_contig_right(self, anchor, newctg, distance, orientation):
+        global cluster_counter
         try:
             assert(newctg not in self.contigset)
         except AssertionError:
             print("New contig " + str(newctg) + " already exists in " + str(id(self)))
-        if distance < 0:
-            self.left_coords[newctg] = self.right_coords[anchor]
-            self.right_coords[newctg] = self.left_coords[newctg] + allcontigs[newctg] + distance
-        else:
-            self.left_coords[newctg] = self.right_coords[anchor] + distance
-            self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg]
+        self.left_coords[newctg] = self.right_coords[anchor] + (allcontigs[anchor] - self.right_coords_contig[anchor]) + distance 
+        self.right_coords[newctg] = self.left_coords[newctg] + allcontigs[newctg]
+        self.left_coords_contig[newctg] = 1
+        self.right_coords_contig[newctg] = allcontigs[newctg]
         contig2scaffold[newctg] = [id(self)]
         self.orientation[newctg] = orientation
         self.contigset_sr.add(newctg)
+        oldlength = self.length
         self.set_new_length()
+        cluster_counter += 1
+        newname = "cluster_" + str(cluster_counter) 
+        self.left_coords[newctg] = self.right_coords[anchor] + allcontigs[anchor] - self.right_coords_contig[anchor] + distance
+        full_distance = allcontigs[anchor] - self.right_coords_contig[anchor] + distance 
+
+        # add merge info to mergefile 
+        if args.mergefile:
+            mode = "extension_ctg" 
+            with open(args.mergefile, "a+") as mergef:
+                mergef.write("\t".join([mode ,self.name, str(oldlength), str(self.turned_around), newctg, str(allcontigs[newctg]), str(False), str(full_distance), newname]))
+                mergef.write("\n")
+        self.name = newname
 
     def get_ctg_len(self, ctg):
         if ctg in self.left_coords and ctg in self.right_coords:
@@ -367,6 +391,7 @@ class Scaffold:
             return False
     
     def merge_sr(self, ctg1, ctg2, distance):
+        global cluster_counter
         try:
             assert(ctg1 in self.contigset or ctg1 in self.contigset_sr)
         except AssertionError:
@@ -382,11 +407,15 @@ class Scaffold:
             self.sr_info[rid] = read
 
         offset = self.right_coords[ctg1] + distance
-            
+
         for ctg,coord in scaf2.left_coords.items():
             self.left_coords[ctg] = coord + offset
         for ctg,coord in scaf2.right_coords.items():
             self.right_coords[ctg] = coord + offset
+        for ctg,coord in scaf2.left_coords_contig.items():
+            self.left_coords_contig[ctg] = coord 
+        for ctg,coord in scaf2.right_coords_contig.items():
+            self.right_coords_contig[ctg] = coord 
         for ctg in scaf2.contigset:
             contig2scaffold[ctg] = [id(self)]
             self.contigset.add(ctg)
@@ -398,7 +427,17 @@ class Scaffold:
         for ctg,ori in scaf2.orientation.items():
             self.orientation[ctg] = ori
         Scaffold.nr_of_scaffolds -= 1
-        self.set_new_length()
+        #self.set_new_length()
+        vlength = self.get_virtual_length()
+        cluster_counter += 1
+        newname = "cluster_" + str(cluster_counter)
+        if args.mergefile:
+            mode = "merging" 
+            with open(args.mergefile, "a+") as mergef:
+                mergef.write("\t".join([mode ,self.name, str(self.length), str(self.turned_around), scaf2.name, str(scaf2.length), str(scaf2.turned_around), str(vlength + distance), newname]))
+                mergef.write("\n")
+        self.length = vlength + distance + scaf2.length
+        self.name = newname
         #del(contig2scaffold[ctg2][0])
         del(scaffolds[id(scaf2)])
 
@@ -407,7 +446,6 @@ class Scaffold:
 
     def merge(self,scaf2):
         global cluster_counter
-
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
@@ -476,11 +514,11 @@ class Scaffold:
         rctg = sorted_same_ctgs1[-1]
         distance = (lscaf.left_coords[rctg] - lscaf.left_coords_contig[rctg]) - (rscaf.left_coords[rctg] - rscaf.left_coords_contig[rctg])
 
-        # merge info into mergefile 
+        # add merge info to mergefile 
         mode = "incorporation" if distance + rscaf.length < lscaf.length else "extension"
         if args.mergefile:
             with open(args.mergefile, "a+") as mergef:
-                mergef.write("\t".join([mode ,lscaf.name, str(lscaf.length), rscaf.name, str(rscaf.length), str(distance), "cluster_" + str(cluster_counter)]))
+                mergef.write("\t".join([mode ,lscaf.name, str(lscaf.length), str(lscaf.turned_around), rscaf.name, str(rscaf.length), str(rscaf.turned_around), str(distance), "cluster_" + str(cluster_counter)]))
                 mergef.write("\n")
 
         nlongread_coords = {}
@@ -490,7 +528,6 @@ class Scaffold:
         rsorted_ctgs= sorted(rscaf.contigset, key = lambda item: rscaf.left_coords[item])
         #print("Left scaffold: " + str(id(lscaf)))
         #print("Right scaffold: " + str(id(rscaf)))
-
 
         def has_similar_mapping_length(scaf1, ctg1, scaf2, ctg2):
             tolerance = 0.3
@@ -952,7 +989,9 @@ with open(args.efile) as f:
             ecc = int(sline[10])
             lenc = int(sline[11])
         payload = {"contig":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-        if rid in blacklist:
+        if ctg in blacklist_contigs:
+            continue
+        elif rid in blacklist:
             if blacklist[rid] == ctg:
                 continue
         elif rid in blacklist_fullread:
@@ -1113,14 +1152,14 @@ def is_leftmost(ctg):
         return True
     return False
 
+
 if args.summaryfile:
     print("adding short reads ....")
-    somethingHappened = True
-    while somethingHappened:
-        somethingHappened = False
-        for scafid, scaffold in scaffolds.copy().items():
-            if somethingHappened:
-                break
+    change = True
+    while change:
+        change = False
+        for scafid in scaffolds.keys():
+            scaffold = scaffolds[scafid]
             ctg1 = scaffold.get_rightmost_contig()
             if not ctg1 in srneighs:
                 continue
@@ -1130,18 +1169,17 @@ if args.summaryfile:
                     #print("merged away " + str(id(scaf2)))
                     #print("contig: " + ctg1)
                     scaffold.merge_sr(ctg1,ctg2n,ctg2d)
-                    somethingHappened = True
+                    change = True
                     break
-                elif ctg2n in contig2scaffold:
-                    pass
-                    #print("Problem merging")
+                elif ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
+                    print("Probably " + ctg1 + " fits on " + scaf2.name + " left of " + ctg2n)
                 else:
                     scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0)
                     if ctg2n not in contigs:
                         print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
                     else:
                         del(contigs[ctg2n])
-                    somethingHappened = True
+                    change = True
             for ctg2n,ctg2d in srneighs[ctg1]["left"]:
                 if ctg2n in contig2scaffold:
                     pass
@@ -1152,8 +1190,11 @@ if args.summaryfile:
                         print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
                     else:
                         del(contigs[ctg2n])
-                    somethingHappened = True
+                    change = True
+            if change:
+                break
 
+print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
         
 
 # Draw all scaffolds
@@ -1166,9 +1207,7 @@ for scaf in scaffolds.values():
     lrsr_lengths[0].append(stringify(scaf.length))
     #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
     yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
-
 dwg.save()
-print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
 
 plt.subplot(121)
 squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9 )
@@ -1181,4 +1220,3 @@ squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
 plt.axis('off')
 plt.title('after long + short read scaffolding')
 plt.show()
-sys.exit(0)
