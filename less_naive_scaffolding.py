@@ -359,10 +359,10 @@ class Scaffold:
         self.contigset_sr.add(newctg)
         oldlength = self.length
         self.set_new_length()
-        cluster_counter += 1
         newname = "cluster_" + str(cluster_counter) 
+        cluster_counter += 1
         self.left_coords[newctg] = self.right_coords[anchor] + allcontigs[anchor] - self.right_coords_contig[anchor] + distance
-        full_distance = allcontigs[anchor] - self.right_coords_contig[anchor] + distance 
+        full_distance = self.right_coords[anchor] + allcontigs[anchor] - self.right_coords_contig[anchor] + distance 
 
         # add merge info to mergefile 
         if args.mergefile:
@@ -400,13 +400,17 @@ class Scaffold:
         scaf2 = scaffolds[contig2scaffold[ctg2][0]]
         if id(scaf1) != id(self):
             print("Problem with ids. self :" + str(id(self)) + " scaf1: " + str(id(scaf1)))
+        vlength = self.get_virtual_length()
+        e = allcontigs[ctg1] - scaf1.right_coords_contig[ctg1] + distance + scaf2.left_coords_contig[ctg2]
+        offset = scaf1.right_coords[ctg1] + e
+        lr_dist = offset - scaf2.left_coords[ctg2]
+        nlength = lr_dist + scaf2.length
 
         for rid, read in scaf2.lr_info.items():
             self.lr_info[rid] = read
         for rid, read in scaf2.sr_info.items():
             self.sr_info[rid] = read
 
-        offset = self.right_coords[ctg1] + distance
 
         for ctg,coord in scaf2.left_coords.items():
             self.left_coords[ctg] = coord + offset
@@ -428,15 +432,14 @@ class Scaffold:
             self.orientation[ctg] = ori
         Scaffold.nr_of_scaffolds -= 1
         #self.set_new_length()
-        vlength = self.get_virtual_length()
-        cluster_counter += 1
         newname = "cluster_" + str(cluster_counter)
+        cluster_counter += 1
         if args.mergefile:
             mode = "merging" 
             with open(args.mergefile, "a+") as mergef:
-                mergef.write("\t".join([mode ,self.name, str(self.length), str(self.turned_around), scaf2.name, str(scaf2.length), str(scaf2.turned_around), str(vlength + distance), newname]))
+                mergef.write("\t".join([mode ,self.name, str(self.length), str(self.turned_around), scaf2.name, str(scaf2.length), str(scaf2.turned_around), str(lr_dist), newname]))
                 mergef.write("\n")
-        self.length = vlength + distance + scaf2.length
+        self.length = nlength
         self.name = newname
         #del(contig2scaffold[ctg2][0])
         del(scaffolds[id(scaf2)])
