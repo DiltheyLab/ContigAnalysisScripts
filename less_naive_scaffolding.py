@@ -3,7 +3,9 @@ from Bio import SeqIO
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
+import random
 from operator import itemgetter
 from itertools import combinations, cycle
 import svgwrite
@@ -131,6 +133,7 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 
 class Scaffold:
     global cluster_counter
+    in_mergefile = False
     scaf_info = []
     sr_info = dict()
     lr_info = dict()
@@ -160,6 +163,7 @@ class Scaffold:
         self.contigset_sr = set()
         self.turned_around = False
         #lr_info[lr[0]] = lr[1]
+        self.in_mergefile = False
 
     
     def delete(self):
@@ -520,6 +524,7 @@ class Scaffold:
         # add merge info to mergefile 
         mode = "incorporation" if distance + rscaf.length < lscaf.length else "extension"
         if args.mergefile:
+            self.in_mergefile = True 
             with open(args.mergefile, "a+") as mergef:
                 mergef.write("\t".join([mode ,lscaf.name, str(lscaf.length), str(lscaf.turned_around), rscaf.name, str(rscaf.length), str(rscaf.turned_around), str(distance), "cluster_" + str(cluster_counter)]))
                 mergef.write("\n")
@@ -868,6 +873,7 @@ class Scaffold:
     def init_from_LR(cls,lr):
         newinst = cls()
         newinst.turned_around = False
+        newinst.in_mergefile = False
         newinst.get_sequence_fragments = []
         newinst.scaf_info = []
         newinst.lr_info = dict()
@@ -1099,8 +1105,6 @@ clusternr = 0
 olen_scaf = len(scaffolds)+1
 while len(scaffolds)-olen_scaf != 0:
     olen_scaf = len(scaffolds)
-
-    
     for contig in contig2scaffold:
         if len(contig2scaffold[contig]) > 1 and len(contig2scaffold[contig]) < 100: # 1036QBL is a problem (139 reads)
             scaf1 = scaffolds[contig2scaffold[contig][0]]
@@ -1109,6 +1113,17 @@ while len(scaffolds)-olen_scaf != 0:
             break
 
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
+# add merge info to mergefile 
+#if args.mergefile:
+#    for scafid, scaf in scaffolds.items():
+#        if not scaf.in_mergefile:
+#            mode = "not_merged"
+#            with open(args.mergefile, "a+") as mergef:
+#                mergef.write("\t".join([mode ,scaf.name, str(scaf.turned_around)]))
+#                mergef.write("\n")
+#        print("Scaffold " + str(scaf.name))
+#        print(", ".join(list(scaf.contigset)))
+
 
 def stringify(nr):
     if nr >= 1000000:
@@ -1125,9 +1140,12 @@ lr_lengths.append([])
 lr_lengths.append([])
 for scaf in scaffolds.values():
     lr_lengths[1].append(scaf.length)
-    lr_lengths[0].append(stringify(scaf.length))
+    lr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
     #lr_lengths[0].append(scaf.name)
     #print("length of scaffold " + scaf.name + ": " + str(scaf.length))
+norm = matplotlib.colors.Normalize(vmin=min(lr_lengths[1]), vmax=max(lr_lengths[1]))
+colors = [matplotlib.cm.gist_ncar(value) for value in random.sample(range(256),len(lr_lengths[1]))]
+lr_lengths.append(colors)
 
 
 def is_rightmost(ctg):
@@ -1171,6 +1189,9 @@ if args.summaryfile:
                     scaf2 = scaffolds[contig2scaffold[ctg2n][0]]
                     #print("merged away " + str(id(scaf2)))
                     #print("contig: " + ctg1)
+                    scaf1 = scaffolds[contig2scaffold[ctg1][0]]
+                    if scaf1.name == scaf2.name:
+                        continue
                     scaffold.merge_sr(ctg1,ctg2n,ctg2d)
                     change = True
                     break
@@ -1207,19 +1228,22 @@ lrsr_lengths.append([])
 for scaf in scaffolds.values():
     lrsr_lengths[1].append(scaf.length)
     #lrsr_lengths[0].append(scaf.name)
-    lrsr_lengths[0].append(stringify(scaf.length))
+    lrsr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
     #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
     yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
 dwg.save()
+#norm = matplotlib.colors.Normalize(vmin=min(lrsr_lengths[1]), vmax=max(lrsr_lengths[1]))
+#colors = [matplotlib.cm.tab20b(norm(value)) for value in lrsr_lengths[1]]
+#lrsr_lengths.append(colors)
 
-plt.subplot(121)
-squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9 )
+#plt.subplot(121)
+squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9,color = colors )
 #squarify.plot(sizes=lr_lengths[1], alpha=.9 )
 plt.axis('off')
 plt.title('after long read scaffolding')
-plt.subplot(122)
-squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
+#plt.subplot(122)
+#squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
 #squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
-plt.axis('off')
-plt.title('after long + short read scaffolding')
+#plt.axis('off')
+#plt.title('after long + short read scaffolding')
 plt.show()
