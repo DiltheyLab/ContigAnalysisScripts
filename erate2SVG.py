@@ -8,7 +8,8 @@ from random import sample
 
 
 parser = ArgumentParser()
-parser.add_argument("efile", help="Error rate file")
+parser.add_argument("inputfile", help="Error-rate or paf-file")
+parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--whitelist", help="Only plot long reads with ids found in this whitelist file.")
 parser.add_argument("--blacklist", help="Do not plot long reads in this file.")
 parser.add_argument("--alignreads", action="store_true", help="Reads will be turned around if necessary and aligned according to their distances.")
@@ -23,25 +24,21 @@ cgreads = []
 
 #blacklist of long reads
 blacklist = {}
+blacklist_contigs = set()
 if args.blacklist:
     with open(args.blacklist) as f:
         for line in f:
-            idx, ctg =  line.strip().split()[0:2]
-            blacklist[idx] = ctg
+            if line.split()[0] == "contig":
+                blacklist_contigs.add(line.split()[1].rstrip())
+            else:
+                idx, ctg =  line.strip().split()[0:2]
+                blacklist[idx] = ctg
 
-'''
-cluster_706	231799	48432	57361	+	505APD	9129	22	9069	3965	9177	200	tp:A:P	cm:i:477	s1:i:3924	s2:i:0	dv:f:0.0836
-cluster_706	231799	77916	86702	-	505APD	9129	187	9105	3991	9087	200	tp:A:P	cm:i:477	s1:i:3921	s2:i:0	dv:f:0.0812
-cluster_706	231799	213763	220432	+	472APD	7054	14	6711	3767	6805	200	tp:A:P	cm:i:494	s1:i:3749	s2:i:0	dv:f:0.0585
-'''
-
-#paf = True
-paf = False
 
 # paf format 
-with open(args.efile) as f:
+with open(args.inputfile) as f:
     for line in f:
-        if paf:
+        if args.paf:
             [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
             #print(strandstring)
             if strandstring == "+":
@@ -57,6 +54,8 @@ with open(args.efile) as f:
                     continue
                 elif blacklist[rid] == ctg:
                     continue
+            if ctg in blacklist_contigs:
+                continue
         if rid in lreads:
             lreads[rid]["maps"].append(data)
             if int(ecr) > lreads[rid]["rm_ecr"]:
@@ -227,61 +226,63 @@ lr_dists = {}
 for lid, read in lreads.items():
     lr_dists[lid] = {lid:0}
 
-for lrs in combinations(ogreads.keys(), 2):
-    lr1 = ogreads[lrs[0]]
-    lr2 = ogreads[lrs[1]]
-    common_ctgs = compare_longreads(lr1, lr2)
-    if len(common_ctgs) > 0:
-        dists = get_distances(lr1, lr2, common_ctgs)
-        lr_dists[lrs[0]][lrs[1]]=dists[0]
-        lr_dists[lrs[1]][lrs[0]]=-dists[0]
+if args.alignreads:
+    for lrs in combinations(ogreads.keys(), 2):
+        lr1 = ogreads[lrs[0]]
+        lr2 = ogreads[lrs[1]]
+        common_ctgs = compare_longreads(lr1, lr2)
+        if len(common_ctgs) > 0:
+            dists = get_distances(lr1, lr2, common_ctgs)
+            lr_dists[lrs[0]][lrs[1]]=dists[0]
+            lr_dists[lrs[1]][lrs[0]]=-dists[0]
 
-            
+                
 sorted_reads = {}
-for cluster in creads:
-    #print(creads[cluster].keys())
-    # find leftmost read 
-    while True:
-        rid = sample(creads[cluster].keys(),1)[0]
-        for rid2 in creads[cluster].keys():
-            if rid2 in lr_dists[rid]:
-                if lr_dists[rid][rid2] < 0:
-                    rid = rid2
-                    break
-        break
-    srid = rid
-
-    # fill lr_dists with transitive distances
-    A = set(creads[cluster].keys())
-    B = set(lr_dists[srid].keys())
-    U = A-B
-    UC = U.copy()
-    while True:
-        for rid in U:
-            for rid2 in lr_dists[rid]:
-                if rid2 not in UC:
-                    lr_dists[srid][rid] = lr_dists[srid][rid2] + lr_dists[rid2][rid]
-                    lr_dists[rid][srid] = lr_dists[srid][rid]
-                    UC.remove(rid)
-                    break
-        U = UC.copy()
-        if not U:
+if args.alignreads:
+    for cluster in creads:
+        #print(creads[cluster].keys())
+        # find leftmost read 
+        while True:
+            rid = sample(creads[cluster].keys(),1)[0]
+            for rid2 in creads[cluster].keys():
+                if rid2 in lr_dists[rid]:
+                    if lr_dists[rid][rid2] < 0:
+                        rid = rid2
+                        break
             break
-   
-    # now there is a new leftmost read
-    smval = 0
-    nsrid = srid
-    for rid2 in lr_dists[srid]:
-        if lr_dists[srid][rid2] < smval:
-            smval = lr_dists[srid][rid2]
-            nsrid = rid2
-    
-    sorted_reads[cluster] = sorted(creads[cluster].keys(), key=lambda x: lr_dists[srid][x])
+        srid = rid
+
+        # fill lr_dists with transitive distances
+        A = set(creads[cluster].keys())
+        B = set(lr_dists[srid].keys())
+        U = A-B
+        UC = U.copy()
+        while True:
+            for rid in U:
+                for rid2 in lr_dists[rid]:
+                    if rid2 not in UC:
+                        lr_dists[srid][rid] = lr_dists[srid][rid2] + lr_dists[rid2][rid]
+                        lr_dists[rid][srid] = lr_dists[srid][rid]
+                        UC.remove(rid)
+                        break
+            U = UC.copy()
+            if not U:
+                break
+       
+        # now there is a new leftmost read
+        smval = 0
+        nsrid = srid
+        for rid2 in lr_dists[srid]:
+            if lr_dists[srid][rid2] < smval:
+                smval = lr_dists[srid][rid2]
+                nsrid = rid2
+        
+        sorted_reads[cluster] = sorted(creads[cluster].keys(), key=lambda x: lr_dists[srid][x])
 
 
-    # store resulsts of this
-    creads[cluster]["smallest_id"] = srid #for this id all values are present in lr_dists
-    creads[cluster]["smallest_offset"] = -smval
+        # store resulsts of this
+        creads[cluster]["smallest_id"] = srid #for this id all values are present in lr_dists
+        creads[cluster]["smallest_offset"] = -smval
 
 #sys.exit(0)
 
@@ -293,9 +294,12 @@ xpad = 200
 ypad = 10
 dwg = svgwrite.Drawing(args.output, size=(u'4000', u'10000'), profile='full')
 csize = 0
-for cluster in creads:
-    #for rid,read in creads[cluster].items():
-    for rid in sorted_reads[cluster]:
+if args.alignreads:
+    clustered_reads = sorted_reads
+else:
+    clustered_reads = creads
+for cluster in clustered_reads:
+    for rid in clustered_reads[cluster]:
         if rid.startswith("small"):
             continue
         if args.alignreads:
