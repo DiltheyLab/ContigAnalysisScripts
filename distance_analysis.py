@@ -11,6 +11,8 @@ parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig distance summary file")
 parser.add_argument("cellline", help="Name of cell line")
+parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
+parser.add_argument("--include_ambigious", help="Include ambigious contigs", action="store_true", default=False)
 
 args = parser.parse_args()
 
@@ -18,6 +20,21 @@ args = parser.parse_args()
 reads = {}
 greads = {}
 cgreads = []
+
+blacklist = {}
+blacklist_fullread = set()
+blacklist_contigs = set()
+if args.blacklistfile:
+    with open(args.blacklistfile) as f:
+        for line in f:
+            sline = line.split()
+            if sline[0] == "contig":
+                blacklist_contigs.add(sline[1])
+            if sline[1] == "all":
+                blacklist_fullread.add(sline[0])
+            else:
+                blacklist[sline[0]] = sline[1]
+ambigious_contigs = set()
 
 # nanopore read info
 with open(args.efile) as f:
@@ -32,6 +49,16 @@ with open(args.efile) as f:
         ecc = int(sline[10])
         lc = int(sline[11])
         payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lc":lc}
+        if ctg.startswith("b_") or ctg.startswith("c_"):
+            ambigious_contigs.add(ctg.split("_")[1])
+        if ctg in blacklist_contigs:
+            continue
+        elif rid in blacklist:
+            if blacklist[rid] == ctg:
+                continue
+        elif rid in blacklist_fullread:
+            continue
+
         if rid in reads:
             reads[rid]["overlaps"].append(payload)
         else:
@@ -103,6 +130,8 @@ for rid in greads:
         ovold = combo[0]
         if ovnew["contig"].startswith("chr") or ovold["contig"].startswith("chr"):
             continue
+        if ovnew["contig"] in ambigious_contigs or ovold["contig"] in ambigious_contigs:
+            continue
         if "_" in ovnew["contig"] or "_" in ovold["contig"]:
             continue
         if ovnew["contig"] == ovold["contig"]:
@@ -166,7 +195,9 @@ dd = dc.dropna()
 print(dd[abs(dd['longread_mean'] - dd['shortread']) > 150])
 
 
-plt.scatter(dd['longread_mean'], dd['shortread'],s= 6, alpha = 0.3)
+plt.scatter(dd['longread_mean'], dd['shortread'],s= 6, alpha = 0.4)
 plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread_mean'])) + ")")
+#plt.xlabel("Long Read Distances")
 plt.ylabel("Short Read Distances (mean: " + "{:.3f}".format(np.mean(dd['shortread'])) + ")")
+#plt.ylabel("Short Read Distances")
 plt.savefig('distances_scatter.pdf')
