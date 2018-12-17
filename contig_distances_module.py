@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from collections import defaultdict
+import sys
 
 
 parser = ArgumentParser()
@@ -28,6 +29,7 @@ if args.blacklist:
 readids = defaultdict(set)
 
 lreads = {}
+reverse = set()
 with open(args.inputfile) as f:
     for line in f:
         if args.paf:
@@ -63,31 +65,111 @@ with open(args.inputfile) as f:
             lreads[rid]["rm_ecr"] = int(ecr)
             lreads[rid]["lm_scr"] = int(scr)
 
+
+for rid, lr in lreads.items():
+    bw = 0
+    fw = 0
+    for mapping in lr["maps"]:
+        if mapping["contig"].endswith(args.cellline): 
+            if mapping["strand"] == 1:
+                bw += 1
+            elif mapping["strand"] == 0:
+                fw += 1
+            else:
+                raise ValueError("strand: " + str(mapping["strand"]))
+    if bw > fw:
+        for mapping in lr["maps"]:
+            if mapping["contig"].endswith(args.cellline): 
+                mapping["strand"] = 1 if mapping["strand"] == 0 else 0
+                tmp = mapping["scr"]
+                mapping["scr"] = lr["length"] - mapping["ecr"]
+                mapping["ecr"] = lr["length"] - tmp
+                tmp = mapping["scc"]
+                mapping["scc"] = mapping["lenc"] - mapping["ecc"]
+                mapping["ecc"] = mapping["lenc"] - tmp
+        reverse.add(rid)
+
 a = readids["756APD"] & readids["1919APD"]
 print(a)
 
+
+def get_coords(lrid, ctg1, ctg2):
+    global lreads
+    m1 = None
+    m2 = None
+    for mapping in lreads[lrid]["maps"]:
+        if mapping["contig"] == ctg1:
+            m1 = mapping
+        if mapping["contig"] == ctg2:
+            m2 = mapping
+    return (m1, m2)
+
+min_ce = -1
+max_cs = -1
+for lrid in a:
+    r1, r2 = get_coords(lrid, "756APD", "1919APD")
+    assert(r1 != None)
+    assert(r2 != None)
+    if min_ce == -1 or r1['ecc'] < min_ce:
+        min_ce = r1['ecc']
+    if max_cs == -1 or r2['ecc'] > max_cs:
+        max_cs = r2['scc']
+
+print(min_ce)
+print(max_cs)
+        
+    #print(c1)
+    #print(c2)
+
+
+
+#{'contig': '1919APD', 'strand': 0, 'scr': 42065, 'ecr': 46396, 'scc': 1, 'ecc': 4318, 'lenc': 4318}
+#{'contig': '756APD', 'strand': 0, 'scr': 23, 'ecr': 1867, 'scc': 1027, 'ecc': 2887, 'lenc': 2902}
+#{'contig': '1919APD', 'strand': 0, 'scr': 1935, 'ecr': 6311, 'scc': 5, 'ecc': 4317, 'lenc': 4318}
+    
+
+#####################
+#sys.exit(0)
+#####################
+
+print("Loading sequences ... ") 
+
+complement = {"A":"T", "T":"A", "G":"C", "C":"G"}
 def revcomp(instring):
     outstring = ""
     for char in instring:
         outstring += complement[char]
     return outstring[::-1]
 
-print("Loading sequences ... ") 
 lrs = {}
 with open(args.sequencefile) as f:
     for i, line in enumerate(f):
         if i % 4 == 0:
             lrid = line.split(" ")[0][1:]
         elif i % 4 == 1:
-            if lrid in dot.nodes:
-                if dot.nodes[lrid]["reverse"]:
-                    lrs[lrid] = revcomp(line.rstrip())
-                else:
-                    lrs[lrid] = line.rstrip()
-            elif lrid in not_merged:
-                if not_merged[lrid]:
-                    lrs[lrid] = revcomp(line.rstrip())
-                else:
-                    lrs[lrid] = line.rstrip()
-    
+            if lrid in reverse:
+                lrs[lrid] = revcomp(line.rstrip())
+            else:
+                lrs[lrid] = line.rstrip()
 print("done")
+
+
+for lrid in a:
+    c1, c2 = get_coords(lrid, "756APD", "1919APD")
+    assert(c1 != None)
+    assert(c2 != None)
+    if c1['ecc'] > min_ce:
+        c1['cut_left'] = c1['ecc'] - min_ce # TODO improve with Alex align tool
+    else:
+        c1['cut_left'] = 0
+
+    if c2['scc'] < max_cs:
+        c2['cut_right'] = max_cs - c2['scc'] # TODO improve with Alex align tool
+    else:
+        c2['cut_right'] = 0
+    leftc = c1['ecr'] + min_ce - c1['ecc']
+    rightc = c2['scr'] - max_cs + c2['scc']
+    print(lrs[lrid][leftc:rightc+1])
+    
+
+
