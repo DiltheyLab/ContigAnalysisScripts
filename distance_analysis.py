@@ -142,10 +142,10 @@ for rid in greads:
             continue
         #if abs(distance) > 2000:
         #    continue
-        if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
-            cstring = ovold["contig"] + "_" + ovnew["contig"]
-        else:
-            cstring = ovnew["contig"] + "_" + ovold["contig"]
+        #if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
+        cstring = ovold["contig"] + "_" + ovnew["contig"]
+        #else:
+        #    cstring = ovnew["contig"] + "_" + ovold["contig"]
         if cstring in distances:
             distances[cstring].append(distance)
         else:
@@ -167,15 +167,17 @@ with open(args.summaryfile) as f:
         sline = line.split()
         ctg1 = sline[0].split("_")[0].strip("+").strip("-")
         ctg2 = sline[0].split("_")[1].strip("+").strip("-")
+        if line.startswith("-"):
+            continue
         if sline[1] == "NA":
             continue
         if float(sline[4]) > 2:
             continue
         moddist = float(sline[1])
-        if int(ctg1.rstrip(args.cellline)) < int(ctg2.rstrip(args.cellline)):
-            cstr = ctg1+"_"+ctg2
-        else:
-            cstr = ctg2+"_"+ctg1
+        #if int(ctg1.rstrip(args.cellline)) < int(ctg2.rstrip(args.cellline)):
+        cstr = ctg1+"_"+ctg2
+        #else:
+        #    cstr = ctg2+"_"+ctg1
         if cstr in distances2:
             if abs(moddist) < abs(distances2[cstr]):
                 distances2[cstr] = moddist
@@ -192,10 +194,20 @@ dc["longread_mean"] = dc.longread.apply(np.mean)
 dd = dc.dropna()
 
 #get interesting differences
-print(dd[abs(dd['longread_mean'] - dd['shortread']) > 150])
+#print(dd[abs(dd['longread_mean'] - dd['shortread']) > 150])
+#print(dd)
+sthsth = []
+for item in dd['longread_mean']:
+    sthsth.append(item < 0)
+for idx, item in enumerate(dd['shortread']):
+    sthsth[idx] = sthsth[idx] or item < 0
+for name in dd[sthsth].index.values:
+    print(name)
+#print(dd[dd['longread_mean'] <= -20])
+#print(dd.index.values)
 
 
-plt.scatter(dd['longread_mean'], dd['shortread'],s= 6, alpha = 0.4)
+plt.scatter(dd['longread_mean'], dd['shortread'],s= 6, alpha = 0.7)
 plt.xlabel("Long Read Distances (mean: " + "{:.3f}".format(np.mean(dd['longread_mean'])) + ")")
 #plt.xlabel("Long Read Distances")
 plt.ylabel("Short Read Distances (mean: " + "{:.3f}".format(np.mean(dd['shortread'])) + ")")
