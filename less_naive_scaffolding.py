@@ -22,6 +22,7 @@ parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of 
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 parser.add_argument("--mergefile", help="File that contains merging information to retrieve the sequence of scaffolds after.")
+parser.add_argument("--contigsmergefile", help="File with information on what contigs should be merged.")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
@@ -100,8 +101,9 @@ add_neighs("105APD","726APD","right",round(-40.1))
 add_neighs("726APD","1674APD","right",round(304.0))
 add_neighs("2080APD","2377APD","right",round(361.9))
 add_neighs("2377APD","928APD","right",round(75.6))
-add_neighs("504APD", "49APD","right",round(-460.3))
-add_neighs("49APD","116APD","right",round(-4.8))
+#add_neighs("504APD", "49APD","right",round(-460.3))
+#add_neighs("49APD","116APD","right",round(-4.8))
+srneighs["504APD"]["right"] = []
 
 blacklist = {}
 blacklist_fullread = set()
@@ -1140,7 +1142,11 @@ lr_lengths.append([])
 lr_lengths.append([])
 for scaf in scaffolds.values():
     lr_lengths[1].append(scaf.length)
-    lr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
+    #lr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
+    if scaf.length > 10000:
+        lr_lengths[0].append(stringify(scaf.length))
+    else:
+        lr_lengths[0].append("")
     #lr_lengths[0].append(scaf.name)
     #print("length of scaffold " + scaf.name + ": " + str(scaf.length))
 norm = matplotlib.colors.Normalize(vmin=min(lr_lengths[1]), vmax=max(lr_lengths[1]))
@@ -1186,6 +1192,7 @@ if args.summaryfile:
                 continue
             for ctg2n,ctg2d in srneighs[ctg1]["right"]:
                 if ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 and is_leftmost(ctg2n):
+                #if ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
                     scaf2 = scaffolds[contig2scaffold[ctg2n][0]]
                     #print("merged away " + str(id(scaf2)))
                     #print("contig: " + ctg1)
@@ -1220,6 +1227,14 @@ if args.summaryfile:
 
 print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
         
+if args.contigsmergefile:
+    with open(args.contigsmergefile, "w+") as cmergef:
+        for scid, scaffold in scaffolds.items():
+            sortedcontigs = sorted(scaffold.contigset, key = lambda item: scaffold.left_coords[item])
+            cmergef.write(">" + scaffold.name + "\n")
+            for ctg1, ctg2 in zip(sortedcontigs[:-1], sortedcontigs[1:]):
+                cmergef.write(ctg1+ "\t" + ctg2 + "\n")
+            
 
 # Draw all scaffolds
 lrsr_lengths = []
@@ -1228,22 +1243,26 @@ lrsr_lengths.append([])
 for scaf in scaffolds.values():
     lrsr_lengths[1].append(scaf.length)
     #lrsr_lengths[0].append(scaf.name)
-    lrsr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
+    #lrsr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
+    lrsr_lengths[0].append(stringify(scaf.length))
     #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
     yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
 dwg.save()
 #norm = matplotlib.colors.Normalize(vmin=min(lrsr_lengths[1]), vmax=max(lrsr_lengths[1]))
 #colors = [matplotlib.cm.tab20b(norm(value)) for value in lrsr_lengths[1]]
 #lrsr_lengths.append(colors)
-
-#plt.subplot(121)
+plt.rc('font', size=15)          # controls default text sizes
+plt.subplot(121)
 squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9,color = colors )
 #squarify.plot(sizes=lr_lengths[1], alpha=.9 )
 plt.axis('off')
 plt.title('after long read scaffolding')
-#plt.subplot(122)
-#squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
+plt.subplot(122)
+squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
 #squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
-#plt.axis('off')
-#plt.title('after long + short read scaffolding')
+plt.axis('off')
+plt.title('after long + short read scaffolding')
 plt.show()
+
+
+
