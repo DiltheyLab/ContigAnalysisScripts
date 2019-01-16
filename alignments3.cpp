@@ -10,8 +10,9 @@ using namespace seqan;
 
 int main(int argc, char const ** argv)
 {
-    if (argc != 2){
-        std::cout << "Wrong number of inputs, please provide a path to the input fasta file" << std::endl;
+    if (argc != 4){
+        std::cout << "Wrong number of inputs, please provide a path to the infix fasta file and the two contigs." << std::endl;
+        std::cout << "$ alignments <infixes.fa> <ctg1.fa> <ctg2.fa>" << std::endl;
         return 1;  // Invalid number of arguments.
     }
 
@@ -21,7 +22,20 @@ int main(int argc, char const ** argv)
     typedef Graph<Alignment<TDepStringSet> > TAlignGraph;       // alignment graph
     //typedef StringSet<Infix<DnaString>> TInfixSet;
 
-    SeqFileIn seqFileIn(toCString(argv[1]));
+    TSequence ctg1;
+    TSequence ctg2;
+    CharString id1;
+    CharString id2;
+    SeqFileIn seqFileIn1(toCString(argv[2]));
+    readRecord(id1, ctg1, seqFileIn1);
+    SeqFileIn seqFileIn2(toCString(argv[3]));
+    readRecord(id2, ctg2, seqFileIn2);
+
+    int len1 = length(ctg1);
+    Suffix<DnaString >::Type suf1 = suffix(ctg1,len1-200);
+    Prefix<DnaString >::Type pref2 = prefix(ctg2,200);
+
+
     //readRecord(id, seq, seqFileIn);
     
     StringSet<CharString> ids;
@@ -29,29 +43,30 @@ int main(int argc, char const ** argv)
     TStringSet all_bridges;
 
     // Reads all remaining records.
+    SeqFileIn seqFileIn(toCString(argv[1]));
     readRecords(ids, all_bridges, seqFileIn, 4);
 
-    TSequence seq1 = "GTCTTCAAATCCTTCTAGTGAATTTTGAGGTTTTTTTTTT";
-    TSequence seq2 = "TTTTTTTTTTGTGGGTGCTATACTTTCTCTTATATTGCTG";
+    //TSequence seq1 = "GTCTTCAAATCCTTCTAGTGAATTTTGAGGTTTTTTTTTT";
+    //TSequence seq2 = "TTTTTTTTTTGTGGGTGCTATACTTTCTCTTATATTGCTG";
     
     int nr_of_seqs = length(all_bridges);
-    
 
     TStringSet sequences;
     TAlignGraph alignG; 
     int score;
     Align<String<Dna> > infixset;
-    resize(rows(infixset), 4);
+    resize(rows(infixset), nr_of_seqs);
     
     
     for (int i = 0; i < nr_of_seqs; ++i){
         //std::cout << all_bridges[i] << std::endl;
         clear(sequences);
-        appendValue(sequences, seq1);
+        //appendValue(sequences, ctg1);
+        appendValue(sequences, suf1);
         appendValue(sequences, all_bridges[i]);
         clear(alignG);
         alignG = TAlignGraph(sequences);
-        score = globalAlignment(alignG, Score<int, Simple>(2, -2, -2), AlignConfig<true, false, true, false>(), LinearGaps());
+        score = globalAlignment(alignG, Score<int, Simple>(1, -1, -1), AlignConfig<true, false, true, false>(), LinearGaps());
         //std::cout << "Score: " << score << std::endl;
         //std::cout << alignG << std::endl;
         int tpos = (int) getLastCoveredPosition(alignG,0);
@@ -65,11 +80,11 @@ int main(int argc, char const ** argv)
 
         //std::cout << all_bridges[i] << std::endl;
         clear(sequences);
-        appendValue(sequences, seq2);
+        appendValue(sequences, pref2);
         appendValue(sequences, all_bridges[i]);
         clear(alignG);
         alignG = TAlignGraph(sequences);
-        score = globalAlignment(alignG, Score<int, Simple>(2, -2, -2), AlignConfig<false, true, false, true>(), LinearGaps());
+        score = globalAlignment(alignG, Score<int, Simple>(1, -1, -1), AlignConfig<false, true, false, true>(), LinearGaps());
         //std::cout << "Score: " << score << std::endl;
         //std::cout << alignG << std::endl;
         tpos = (int) getFirstCoveredPosition(alignG,0);
@@ -84,19 +99,16 @@ int main(int argc, char const ** argv)
         std::cout << "Infix: " << inf << std::endl;
         //appendValue(infixset, inf);
         assignSource(row(infixset, i), inf);
-
     }
-
     globalMsaAlignment(infixset, SimpleScore(2,-2,-2,-2));
     std::cout << "Infixe: " << infixset << std::endl;
-
     String<ProfileChar<Dna> > profile;
     resize(profile, length(row(infixset, 0)));
-    for (unsigned rowNo = 0; rowNo < 4u; ++rowNo)
+    for (unsigned rowNo = 0; rowNo < nr_of_seqs; ++rowNo)
         for (unsigned i = 0; i < length(row(infixset, rowNo)); ++i)
             profile[i].count[ordValue(getValue(row(infixset, rowNo), i))] += 1;
 
-   // call consensus from this string
+    // call consensus from this string
     DnaString consensus;
     for (unsigned i = 0; i < length(profile); ++i)
     {
