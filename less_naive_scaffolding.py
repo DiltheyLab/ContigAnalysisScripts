@@ -117,9 +117,12 @@ if args.blacklistfile:
             if sline[1] == "all":
                 blacklist_fullread.add(sline[0])
             else:
-                blacklist[sline[0]] = sline[1]
+                if sline[0] in blacklist:
+                    blacklist[sline[0]].append(sline[1])
+                else:
+                    blacklist[sline[0]] = [sline[1]]
 
-print(blacklist)
+#print(blacklist)
    
 ctgpos = {}
 pos = 0
@@ -1003,7 +1006,7 @@ with open(args.efile) as f:
         if ctg in blacklist_contigs:
             continue
         elif rid in blacklist:
-            if blacklist[rid] == ctg:
+            if ctg in blacklist[rid]:
                 continue
         elif rid in blacklist_fullread:
             continue
@@ -1232,6 +1235,9 @@ if args.contigsmergefile:
         for scid, scaffold in scaffolds.items():
             sortedcontigs = sorted(scaffold.contigset, key = lambda item: scaffold.left_coords[item])
             cmergef.write(">" + scaffold.name + "\n")
+            for ctg in scaffold.contigset:
+                if ctg.startswith("chr"):
+                    sortedcontigs.remove(ctg)
             for ctg1, ctg2 in zip(sortedcontigs[:-1], sortedcontigs[1:]):
                 cmergef.write(ctg1+ "\t" + ctg2 + "\n")
             
