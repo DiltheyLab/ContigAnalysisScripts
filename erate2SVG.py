@@ -315,7 +315,7 @@ if args.alignreads:
     clustered_reads = sorted_reads
 else:
     clustered_reads = creads
-clip_path_idc = 0
+gradient_idc = 0
 for cluster in clustered_reads:
     for rid in clustered_reads[cluster]:
         if rid.startswith("small"):
@@ -336,21 +336,42 @@ for cluster in clustered_reads:
             ec = read["ecr"]
             scc = read["scc"]
             ecc = read["ecc"]
-            ctg = read["contig"].rstrip(args.linename)
+            ctg = read["contig"].rstrip("rc").rstrip(args.linename)
             ctgn = read["contig"].rstrip("rc")
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctg = ctg[0:8]
                 continue
+            lenc = contigs[ctgn]
 
-            clip_path_idc+=1
-            clip_path = dwg.defs.add(dwg.clipPath(id=str(clip_path_idc)))
-            clip_path.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100), ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1))
-            leftclip = scc/100
-            rightclip = (contigs[ctgn]-ecc)/100
+            gradient_idc += 1
+            #clip_path = dwg.defs.add(dwg.clipPath(id=str(clip_path_idc)))
+            #clip_path.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100), ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1))
+            #leftclip = scc/100
+            #rightclip = (contigs[ctgn]-ecc)/100
+            lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=-scc/(ecc-scc), x2=1+(contigs[ctgn]-ecc)/(ecc-scc), y1=0, y2=0))
+            if ctg.endswith("0") or ctg.endswith("1"):
+                col1 = "#FF0000"
+                col2 = "#0000FF"
+            elif ctg.endswith("2") or ctg.endswith("3"):
+                col1 = "#FFE119"
+                col2 = "#000000"
+            elif ctg.endswith("4") or ctg.endswith("5"):
+                col1 = "#911eb4"
+                col2 = "#a9a9a9"
+            elif ctg.endswith("6") or ctg.endswith("7"):
+                col1 = "#000075"
+                col2 = "#f58231"
+            elif ctg.endswith("8") or ctg.endswith("9"):
+                col1 = "#e6beff"
+                col2 = "#808000"
+                
+            lineargrad.add_stop_color("0%",col1)
+            lineargrad.add_stop_color("50%","#FFFFFF")
+            lineargrad.add_stop_color("100%",col2)
             #g.add(svgwrite.shapes.Rect((xpad+(sc/100)-leftflip,yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100+leftclip+rightclip,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#rwb)'))
-            
-            g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100)-leftclip,ypad+ypos-6), ((ec-sc)/100+leftclip+rightclip,12), stroke='black', stroke_width=1, fill='url(#rwb)', clip_path='url(#'+str(clip_path_idc)+')'))
+#lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
+            g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             if above:
                 yt = ypad+ypos-8
                 if col == "blue":
