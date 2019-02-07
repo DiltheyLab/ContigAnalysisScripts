@@ -28,7 +28,7 @@ a18c2fc1-871e-4d8e-96a4-50fe37ace3c7    1360APD
 024afb1f-f3ce-4205-99a5-a7808fa56d92    all
 f1bd7e1a-12d6-457a-89c3-680a530e8062    2317APD
 7ad99c6d-282a-43bb-a4ea-57de5131dee3    145APD
-653b2764-e21e-458a-99e4-702f7eac052a    2304APD
+contig    2304APD
 b3434ca6-92e6-475a-87fb-cb772add01d7    2106APD
 6b461758-41cf-4438-aa3d-c62c329adbf7    all         #interesting read but probably mapping was bad 
 aaa5e819-c744-4c6f-aa46-0d6351dee36a    214APD
@@ -36,7 +36,7 @@ e6f0773e-1fa0-4eda-bfb6-82cc65da6b78    1074APD
 f67f9b65-2333-4ccd-beb4-08bc086545eb    1542APD
 a725f865-4c3f-4a30-aef1-a3cbc8ce917d    1542APD     #very small does not matter
 44e5f841-85a7-4d4c-94aa-7a4e355f6a16    411APD
-2aefd44d-b4be-4ebd-b230-fbbbdcd4f0a3    1624APD
+contig  1624APD
 44e5f841-85a7-4d4c-94aa-7a4e355f6a16    465APD
 d5547fb7-848a-4ba6-a597-fc66269629e1    all
 1c094c4e-c015-40a4-beb6-790f5a5583f2    621APD
@@ -61,3 +61,15 @@ contig  49APD
 8e45a3be-76db-46da-ae47-b2baf6103948    all
 bbed0a89-361b-4023-b343-9cf3af05bc24    all
 e95acb44-95b0-4743-9e8f-c5f3ae2cbe7b    all
+a4d563ed-ddda-4feb-ab3f-16539648edf9    all
+contig  1096APD
+6eac0330-225d-40b1-b494-07b571b32754    2043APD
+contig  1542APD
+1506387f-9aed-4aa0-9e2b-98560f867d41    all
+contig  1225APD
+contig  b_58APD  
+contig  c_58APD  
+contig  b_2443APD  
+contig  259APD
+contig  436APD
+contig  2324APD                                     #only exists in reverse comlementary
