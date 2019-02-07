@@ -1,4 +1,6 @@
 #include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <seqan/align.h>
 #include <seqan/graph_msa.h>
 #include <seqan/seq_io.h>
@@ -44,7 +46,7 @@ int main(int argc, char const ** argv)
 
     // Reads all remaining records.
     SeqFileIn seqFileIn(toCString(argv[1]));
-    readRecords(ids, all_bridges, seqFileIn, 4);
+    readRecords(ids, all_bridges, seqFileIn);
 
     //TSequence seq1 = "GTCTTCAAATCCTTCTAGTGAATTTTGAGGTTTTTTTTTT";
     //TSequence seq2 = "TTTTTTTTTTGTGGGTGCTATACTTTCTCTTATATTGCTG";
@@ -52,11 +54,11 @@ int main(int argc, char const ** argv)
     int nr_of_seqs = length(all_bridges);
 
     TStringSet sequences;
+    TStringSet good_bridges;
     TAlignGraph alignG; 
     int score;
     Align<String<Dna> > infixset;
-    resize(rows(infixset), nr_of_seqs);
-    
+    //resize(rows(infixset), nr_of_seqs);
     
     for (int i = 0; i < nr_of_seqs; ++i){
         //std::cout << all_bridges[i] << std::endl;
@@ -93,18 +95,37 @@ int main(int argc, char const ** argv)
         getProjectedPosition(alignG,0, tpos, nid2, npos2);
         //std::cout << "fist covered: " << (int) 0 << "\t" << (int) tpos << std::endl;
         //std::cout << "first covered: " << (int) nid2 << "\t" << (int) npos2 << std::endl;
-        Prefix<DnaString >::Type pref = prefix(all_bridges[i], npos2+1);
+        //Prefix<DnaString >::Type pref = prefix(all_bridges[i], npos2+1);
         //std::cout << "Prefix: " << pref << std::endl;
-        Infix<DnaString >::Type inf = infix(all_bridges[i], npos1+1,npos2+1);
-        std::cout << "Infix: " << inf << std::endl;
+        //std::cout << "npos1: " << npos1 << "   npos2: " << npos2 << std::endl;
+        Infix<DnaString >::Type inf;
+        if (npos1+1 < npos2){
+            inf = infix(all_bridges[i], npos1+1,npos2);
+            appendValue(good_bridges, inf);
+        }
+        //else
+         //   inf = infix(all_bridges[i], npos1+1,npos1+1);
+        //std::cout << "Infix: " << inf << std::endl;
+
         //appendValue(infixset, inf);
-        assignSource(row(infixset, i), inf);
+        //assignSource(row(infixset, i), inf);
+    }
+    if (length(good_bridges) == 0){
+    
+        std::cout << "consensus sequence is" << std::endl \
+              << "" << "\n";
+        exit(0);
+    }
+    resize(rows(infixset), length(good_bridges));
+    for (int i= 0; i < length(good_bridges); ++i){
+        assignSource(row(infixset, i), good_bridges[i]);
+        
     }
     globalMsaAlignment(infixset, SimpleScore(2,-2,-2,-2));
     std::cout << "Infixe: " << infixset << std::endl;
     String<ProfileChar<Dna> > profile;
     resize(profile, length(row(infixset, 0)));
-    for (unsigned rowNo = 0; rowNo < nr_of_seqs; ++rowNo)
+    for (unsigned rowNo = 0; rowNo < length(good_bridges); ++rowNo)
         for (unsigned i = 0; i < length(row(infixset, rowNo)); ++i)
             profile[i].count[ordValue(getValue(row(infixset, rowNo), i))] += 1;
 
@@ -116,8 +137,7 @@ int main(int argc, char const ** argv)
         if (idx < 4)  // is not gap
             appendValue(consensus, Dna(getMaxIndex(profile[i])));
     }
-
-    std::cout << "consensus sequence is\n"
+    std::cout << "consensus sequence is" << std::endl \
               << consensus << "\n";
 
 
