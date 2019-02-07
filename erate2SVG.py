@@ -6,7 +6,9 @@ from itertools import combinations
 from random import sample
 from svgwrite.container import Group
 from Bio import SeqIO
+from collections import defaultdict
 
+from scaffold import Scaffold
 
 
 parser = ArgumentParser()
@@ -27,7 +29,7 @@ greads = {}
 cgreads = []
 
 #blacklist of long reads
-blacklist = {}
+blacklist = defaultdict(set)
 blacklist_contigs = set()
 if args.blacklist:
     with open(args.blacklist) as f:
@@ -36,7 +38,7 @@ if args.blacklist:
                 blacklist_contigs.add(line.split()[1].rstrip())
             else:
                 idx, ctg =  line.strip().split()[0:2]
-                blacklist[idx] = ctg
+                blacklist[idx].add(ctg)
 
 
 contigs = {}
@@ -55,12 +57,12 @@ with open(args.inputfile) as f:
                 strand = 1
         else:
             [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-        data = {"contig":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+        data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
         if args.blacklist:
             if rid in blacklist:
-                if blacklist[rid] == "all":
+                if "all" in blacklist[rid]:
                     continue
-                elif blacklist[rid] == ctg:
+                elif ctg in blacklist[rid]:
                     continue
             if ctg in blacklist_contigs:
                 continue
@@ -86,18 +88,18 @@ intreads_contigset = set()
 for rid, read in lreads.items():
     counter = 0
     for item in read["maps"]:
-        if item["contig"].endswith(args.linename):
+        if item["name"].endswith(args.linename):
             counter += 1
     if counter >= int(args.mincontigs):
         greadst[rid] = read
         for item in read["maps"]:
-            if item["contig"].endswith(args.linename):
-                greads_contigset.add(item["contig"])
+            if item["name"].endswith(args.linename):
+                greads_contigset.add(item["name"])
     #if counter == 1:
     #    intreads[rid] = read
     #    for item in read["maps"]:
-    #        if item["contig"].endswith(args.linename):
-    #            intreads_contigset.add(item["contig"])
+    #        if item["name"].endswith(args.linename):
+    #            intreads_contigset.add(item["name"])
             
 #intersection = greads_contigset.intersection(intreads_contigset)
 #sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.linename)))
@@ -117,7 +119,7 @@ for rid, lr in greadst.items():
     bw = 0
     fw = 0
     for mapping in lr["maps"]:
-        if mapping["contig"].endswith(args.linename): 
+        if mapping["name"].endswith(args.linename): 
             if mapping["strand"] == 1:
                 bw += 1
             elif mapping["strand"] == 0:
@@ -126,7 +128,7 @@ for rid, lr in greadst.items():
                 raise ValueError("strand: " + str(mapping["strand"]))
     if bw > fw:
         for mapping in lr["maps"]:
-            if mapping["contig"].endswith(args.linename): 
+            if mapping["name"].endswith(args.linename): 
                 mapping["strand"] = 1 if mapping["strand"] == 0 else 0
                 tmp = mapping["scr"]
                 mapping["scr"] = lr["length"] - mapping["ecr"]
@@ -138,9 +140,9 @@ for rid, lr in greadst.items():
         
     # turn around and redefine wrong contigs
     for mapping in lr["maps"]:
-        if mapping["contig"].endswith(args.linename): 
+        if mapping["name"].endswith(args.linename): 
             if mapping["strand"] == 1: #define a new contigname and turn it around
-                mapping["contig"] = mapping["contig"] + "rc"
+                mapping["name"] = mapping["name"] + "rc"
                 if not args.paf:
                     tmp = mapping["scc"]
                     mapping["scc"] = mapping["lenc"] - mapping["ecc"]
@@ -160,6 +162,7 @@ print("length greads: " + str(len(greads)))
 
 # cluster np-reads or only keep whitelisted ones
 creads = {}
+ccontigs = {}
 whitelist = set()
 clusternr = 0
 if(args.whitelist):
@@ -170,7 +173,7 @@ if(args.whitelist):
     creads[0] = {}
     for rid,read in greads.items():
         for mapping in read["maps"]:
-            if mapping["contig"] in whitelist:
+            if mapping["name"] in whitelist:
                 creads[0][rid] = read
 else:
     while len(greads) > 0:
@@ -178,40 +181,49 @@ else:
         current_cluster = {}
         current_contigs = set()
         # take a random read and build a cluster from it
-        cr = greads.popitem()
+
+        ck = sample(greads.keys(),1)[0]
+        #print(ck)
+        cr = (ck, greads[ck])
+        #cr = greads.popitem()
         current_cluster[cr[0]] = cr[1]
+        #for contig in cr[1]["maps"]:
+        #    if not contig["name"].startswith("chr"):
+        #        current_contigs.add(contig["name"])
         #print(len(current_cluster))
         olen = 0
         while len(current_cluster) != olen:
             olen = len(current_cluster)
             for contig in cr[1]["maps"]:
-                if not contig["contig"].startswith("chr"):
-                    current_contigs.add(contig["contig"])
+                if not contig["name"].startswith("chr"):
+                    current_contigs.add(contig["name"])
+            del(greads[cr[0]])
             #print("contigs: " + str(current_contigs))
             for readid,readval in greads.items():
                 contig_found = False
                 for contig in readval["maps"]:
-                    if contig["contig"] in current_contigs:
+                    if contig["name"] in current_contigs:
                         contig_found = True
                         current_cluster[readid] = readval
-                        cr = (readid, greads.pop(readid))
+                        cr = (readid, greads[readid])
                         break
                 if contig_found:
                     break
             
         print("cluster length: " + str(len(current_cluster)))
         creads[clusternr] = current_cluster
+        ccontigs[clusternr] = current_contigs
 
 def compare_longreads(lr1, lr2):
     l1c = []
     l2c = []
     for m in lr1["maps"]:
-        cn = m["contig"]
-        if cn.endswith(args.linename):
+        cn = m["name"]
+        if not cn.startswith("chr"):
             l1c.append(cn)
     for m in lr2["maps"]:
-        cn = m["contig"]
-        if cn.endswith(args.linename):
+        cn = m["name"]
+        if not cn.startswith("chr"):
             l2c.append(cn)
     common_ctgs = set(l1c).intersection(set(l2c))
     return common_ctgs
@@ -219,7 +231,7 @@ def compare_longreads(lr1, lr2):
 
 def get_contig_info(lr,ctg):
     for maps in lr["maps"]:    
-        if maps["contig"] == ctg:
+        if maps["name"] == ctg:
             return maps
 
 # calculate distances for each cluster
@@ -251,6 +263,7 @@ if args.alignreads:
 sorted_reads = {}
 if args.alignreads:
     for cluster in creads:
+        #print("ccontigs: " + str(ccontigs[cluster]))
         #print(creads[cluster].keys())
         # find leftmost read 
         while True:
@@ -266,9 +279,14 @@ if args.alignreads:
         # fill lr_dists with transitive distances
         A = set(creads[cluster].keys())
         B = set(lr_dists[srid].keys())
+        #print("A: "+ str(A))
+        #print("B: "+ str(B))
         U = A-B
+        #print("U: "+ str(U))
         UC = U.copy()
         while True:
+        #for i in range(100):
+            #print(U)
             for rid in U:
                 for rid2 in lr_dists[rid]:
                     if rid2 not in UC:
@@ -310,6 +328,13 @@ lineargrad.add_stop_color("0%","#FF0000")
 lineargrad.add_stop_color("50%","#FFFFFF")
 lineargrad.add_stop_color("100%","#0000FF")
 
+
+def shortname(ctgname):
+    if "_" in ctgname:
+        return ctgname.split("_")[1]
+    else:
+        return ctgname
+
 csize = 0
 if args.alignreads:
     clustered_reads = sorted_reads
@@ -336,20 +361,20 @@ for cluster in clustered_reads:
             ec = read["ecr"]
             scc = read["scc"]
             ecc = read["ecc"]
-            ctg = read["contig"].rstrip("rc").rstrip(args.linename)
-            ctgn = read["contig"].rstrip("rc")
+            ctg = read["name"].rstrip("rc").rstrip(args.linename)
+            ctgn = read["name"].rstrip("rc")
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctg = ctg[0:8]
                 continue
-            lenc = contigs[ctgn]
+            lenc = contigs[shortname(ctgn)]
 
             gradient_idc += 1
             #clip_path = dwg.defs.add(dwg.clipPath(id=str(clip_path_idc)))
             #clip_path.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100), ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1))
             #leftclip = scc/100
             #rightclip = (contigs[ctgn]-ecc)/100
-            lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=-scc/(ecc-scc), x2=1+(contigs[ctgn]-ecc)/(ecc-scc), y1=0, y2=0))
+            lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctgn)]-ecc)/(ecc-scc), y1=0, y2=0))
             if ctg.endswith("0") or ctg.endswith("1"):
                 col1 = "#FF0000"
                 col2 = "#0000FF"
@@ -381,8 +406,8 @@ for cluster in clustered_reads:
             else:
                 yt = ypad+ypos+13
             above = not above
-            #g.add(dwg.text("s"+ctg+"$", insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:4"))
-            g.add(dwg.text(ctg, insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:6"))
+            #g.add(dwg.text(ctg, insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:6"))
+            g.add(dwg.text("s"+ctg+"$", insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:4"))
             if read["strand"] == 0:
                 direction = ">"
             elif read["strand"] == 1:
