@@ -368,7 +368,7 @@ def is_leftmost(ctg):
         return True
     return False
 
-sys.exit()
+#sys.exit()
 
 if args.summaryfile:
     print("adding short reads ....")
@@ -395,7 +395,8 @@ if args.summaryfile:
                 elif ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
                     print("Probably " + ctg1 + " fits on " + scaf2.name + " left of " + ctg2n)
                 else:
-                    scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0, args.mergefile)
+                    scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0, allcontigs, args.mergefile)
+                    contig2scaffold[ctg2n].append(id(scaffold))
                     if ctg2n not in contigs:
                         print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
                     else:
@@ -435,11 +436,9 @@ lrsr_lengths.append([])
 lrsr_lengths.append([])
 for scaf in scaffolds.values():
     lrsr_lengths[1].append(scaf.length)
-    #lrsr_lengths[0].append(scaf.name)
-    #lrsr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
     lrsr_lengths[0].append(stringify(scaf.length))
     #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
-    yp += scaf.to_SVG(dwg, xpad, yp, False) + 10
+    yp += scaf.to_SVG(dwg, allcontigs,  xpad, yp, False) + 10
 dwg.save()
 #norm = matplotlib.colors.Normalize(vmin=min(lrsr_lengths[1]), vmax=max(lrsr_lengths[1]))
 #colors = [matplotlib.cm.tab20b(norm(value)) for value in lrsr_lengths[1]]
