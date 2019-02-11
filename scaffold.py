@@ -1,4 +1,6 @@
-from itertools import combinations
+from itertools import combinations, cycle
+import svgwrite
+import sys
 
 class Scaffold:
     cluster_counter = 0
@@ -199,7 +201,7 @@ class Scaffold:
         
 
     # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
-    def to_SVG(self, img, xoff, yoff,show_lr_ids):
+    def to_SVG(self, img, contigs, xoff, yoff,show_lr_ids):
         ypad = 7
         col = "black"
         nr_longreads = len(self.longread_coords)
@@ -210,17 +212,17 @@ class Scaffold:
                 ylen = nr_longreads * y_space_per_longread - ypos
                 rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
                 rect.fill(color="none").dasharray([2, 2])
-                img.add(dwg.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
+                img.add(img.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
                 ypos += y_space_per_longread
         ypos += ypad
             
-        img.add(dwg.line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        img.add(svgwrite.shapes.Line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
 
         ctg_y_drawsize = 8
         ctg_y_halfdrawsize = ctg_y_drawsize/2
         ctg_relative_positions = cycle([-ctg_y_halfdrawsize-1, ctg_y_halfdrawsize+3, -ctg_y_halfdrawsize-4, ctg_y_halfdrawsize+6])
 
-
+        gradient_idc = 0
         for ctg in sorted(self.contigset, key= lambda x: self.left_coords[x]):
             #print(read)
             sc = self.left_coords[ctg]
@@ -228,24 +230,47 @@ class Scaffold:
             scc = self.left_coords_contig[ctg]
             ecc = self.right_coords_contig[ctg]
             ctgn = ctg.rstrip(self.linename)
+            ctgn2 = ctg.rstrip("rc").rstrip(self.linename)
             #ctg = read[0]
             if ctg.startswith("chr"):
                 ctgn = ctgn[0:9]
             else:
                 ctgn = "$" + ctgn + "q"
-            clip_path = dwg.defs.add(dwg.clipPath())
-            clip_path.add(dwg.Rect( (xoff+(sc/100), yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1))
 
-            leftclip = scc/100
-            rightclip = (contigs[ctg]-ecc)/100
-            img.add(svgwrite.shapes.Rect((xoff+(sc/100)-leftflip,yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100+leftclip+rightclip,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#rwb)'))
+            gradient_idc += 1
+            gradient_id = self.name + "_" + str(gradient_idc)
+            lineargrad = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id , x1=-scc/(ecc-scc), x2=1+(contigs[self.shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            if ctgn2.endswith("0") or ctgn2.endswith("1"):
+                col1 = "#FF0000"
+                col2 = "#0000FF"
+            elif ctgn2.endswith("2") or ctgn2.endswith("3"):
+                col1 = "#FFE119"
+                col2 = "#000000"
+            elif ctgn2.endswith("4") or ctgn2.endswith("5"):
+                col1 = "#911eb4"
+                col2 = "#a9a9a9"
+            elif ctgn2.endswith("6") or ctgn2.endswith("7"):
+                col1 = "#000075"
+                col2 = "#f58231"
+            elif ctgn2.endswith("8") or ctgn2.endswith("9"):
+                col1 = "#e6beff"
+                col2 = "#808000"
+                
+            lineargrad.add_stop_color("0%",col1)
+            lineargrad.add_stop_color("50%","#FFFFFF")
+            lineargrad.add_stop_color("100%",col2)
+
+            #leftclip = scc/100
+            #rightclip = (contigs[self.shortname(ctg)]-ecc)/100
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id + ')'))
+            #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             yt = yoff + ypos + next(ctg_relative_positions)
-            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
+            img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
                 direction = "<"
-            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
+            img.add(img.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
         for ctg in sorted(self.contigset_sr, key= lambda x: self.left_coords[x]):
             #print(read)
             sc = self.left_coords[ctg]
@@ -255,12 +280,12 @@ class Scaffold:
             img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='grey', stroke_width=1, fill = 'white'))
             col = "gray"
             yt = yoff + ypos + next(ctg_relative_positions)
-            img.add(dwg.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
+            img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
             if self.orientation[ctg] == 0:
                 direction = ">"
             else:
                 direction = "<"
-            img.add(dwg.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
+            img.add(img.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
         return ypos+7
 
     # use only when sr_contigs are added
@@ -298,24 +323,24 @@ class Scaffold:
             self.move_all_right(offset)
         self.set_new_length()
 
-    def add_short_read_contig_right(self, anchor, newctg, distance, orientation, mergefile=None):
+    def add_short_read_contig_right(self, anchor, newctg, distance, orientation, contigs, mergefile=None):
         try:
             assert(newctg not in self.contigset)
         except AssertionError:
             print("New contig " + str(newctg) + " already exists in " + str(id(self)))
-        self.left_coords[newctg] = self.right_coords[anchor] + (allcontigs[anchor] - self.right_coords_contig[anchor]) + distance 
-        self.right_coords[newctg] = self.left_coords[newctg] + allcontigs[newctg]
+        self.left_coords[newctg] = self.right_coords[anchor] + (contigs[anchor] - self.right_coords_contig[anchor]) + distance 
+        self.right_coords[newctg] = self.left_coords[newctg] + contigs[newctg]
         self.left_coords_contig[newctg] = 1
-        self.right_coords_contig[newctg] = allcontigs[newctg]
-        contig2scaffold[newctg] = [id(self)]
+        self.right_coords_contig[newctg] = contigs[newctg]
+        #contig2scaffold[newctg] = [id(self)]
         self.orientation[newctg] = orientation
         self.contigset_sr.add(newctg)
         oldlength = self.length
         self.set_new_length()
         newname = "cluster_" + str(Scaffold.cluster_counter) 
         Scaffold.cluster_counter += 1
-        #self.left_coords[newctg] = self.right_coords[anchor] + allcontigs[anchor] - self.right_coords_contig[anchor] + distance
-        full_distance = self.right_coords[anchor] + allcontigs[anchor] - self.right_coords_contig[anchor] + distance 
+        #self.left_coords[newctg] = self.right_coords[anchor] + contigs[anchor] - self.right_coords_contig[anchor] + distance
+        full_distance = self.right_coords[anchor] + contigs[anchor] - self.right_coords_contig[anchor] + distance 
         if anchor == "2406APD":
             print(self.left_coords[anchor])
             print(self.right_coords[anchor])
@@ -326,7 +351,7 @@ class Scaffold:
         if mergefile:
             mode = "extension_ctg" 
             with open(mergefile, "a+") as mergef:
-                mergef.write("\t".join([mode ,self.name, str(oldlength), str(self.turned_around), newctg, str(allcontigs[newctg]), str(False), str(full_distance), newname]))
+                mergef.write("\t".join([mode ,self.name, str(oldlength), str(self.turned_around), newctg, str(contigs[newctg]), str(False), str(full_distance), newname]))
                 mergef.write("\n")
         self.name = newname
 
@@ -493,65 +518,38 @@ class Scaffold:
             if not (lonedge or ronedge or has_similar_mapping_length(lscaf, ctg, rscaf, ctg)):
                 pass
                 #print("WARNING: merging " + str(self.idx) + " and " + str(scaf2.idx) + ". Contig " + ctg + " has very different mapping lengths (" + str(lscaf.get_ctg_len(ctg)) + "/" + str(rscaf.get_ctg_len(ctg)) + ") in the two scaffolds.")
-        last_right_coord = 0
         nleft_coords = {}
         nleft_coords_contig = {}
         nright_coords = {}
         nright_coords_contig = {}
         norientation = {}
         ncontigset = self.contigset.copy()
-        last_common_ctg = "nope"
+        first_anchor = None
 
+        # take same coordinates for contigs on left scaffold
         for ctg in lsorted_ctgs:
             norientation[ctg] = lscaf.orientation[ctg]
-            lonedge = lsorted_ctgs[0] == ctg or lsorted_ctgs[-1] == ctg
-            #ronedge = rsorted_ctgs[0] == ctg or rsorted_ctgs[-1] == ctg
-            #print("lsc: " + lsorted_ctgs[0])
-            if lsorted_ctgs[0] == ctg:
-                nleft_coords[ctg] = lscaf.left_coords[ctg]
-                nright_coords[ctg] = lscaf.right_coords[ctg]
-                last_right_coord = lscaf.right_coords[ctg]
-                #print(ctg)
-                #print(nleft_coords[ctg])
-                #print(nright_coords[ctg])
-            else: 
-                lctgl = lscaf.right_coords[ctg] - lscaf.left_coords[ctg]
-                ld = lscaf.left_coords[ctg] - last_right_coord
-                #print("lctgl: " + str(lctgl))
-                #print("ld: " + str(ld))
-                rctgl = lctgl
-                rd = ld
-                if ctg in same_ctgs:
-                    rctgl = rscaf.right_coords[ctg] - rscaf.left_coords[ctg]
-                    #rd = rscaf.left_coords[ctg] - last_right_coord
-                nleft_coords[ctg] = last_right_coord + ld #(ld if ld < rd else rd)
-                nright_coords[ctg] = nleft_coords[ctg] + (lctgl if lctgl > rctgl else rctgl)
-                last_right_coords = nright_coords[ctg]
-                #print(ctg)
-                #print(nleft_coords[ctg])
-                #print(nright_coords[ctg])
-            #if ctg in same_ctgs:
-            #    last_common_ctg = ctg
-            #else:
-            #    last_common_ctg = "nope"
-        first_anchor = "nope"
+            nleft_coords[ctg] = lscaf.left_coords[ctg]
+            nright_coords[ctg] = lscaf.right_coords[ctg]
+        # take offset for first common contig
         for ctg in rsorted_ctgs:
             if ctg in same_ctgs:
-                if first_anchor == "nope":
-                    first_anchor = ctg
-                    if rscaf.is_on_left_edge(ctg):
-                        offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
-                    else:
-                        offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
+                first_anchor = ctg
+                if rscaf.is_on_left_edge(ctg):
+                    offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
+                else:
+                    offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
+                break
+        # utilize offset for long read info
         for lrid, lrc in rscaf.longread_coords.items():
             nlongread_coords[lrid] = [lrc[0] + offset , lrc[1] + offset]
-        last_common_ctg = "nope"
+        last_common_ctg = None
         for ctg in rsorted_ctgs:
             norientation[ctg] = rscaf.orientation[ctg]
             if ctg in same_ctgs:
                 last_common_ctg = ctg
                 continue
-            if last_common_ctg == "nope":
+            if not last_common_ctg:
                 nright_coords[ctg] = nleft_coords[first_anchor] - (rscaf.left_coords[first_anchor] - rscaf.right_coords[ctg])
                 nleft_coords[ctg] = nright_coords[ctg] - rscaf.get_ctg_len( ctg)
             else:
@@ -844,6 +842,8 @@ class Scaffold:
                     lold = abs(newinst.right_coords[ctg] - newinst.left_coords[ctg])
                     lnew = abs(part["ecr"]-part["scr"])
                     if lnew < lold: # ignore this contig-map, because it is smaller than the previous one
+                        continue
+                    if lnew < 300:# if only 20% of the contig is mapped and it is small 
                         continue
                 else:
                     newinst.contigset.add(ctg)
