@@ -2,6 +2,75 @@ from itertools import combinations, cycle
 import svgwrite
 import sys
 
+def shortname(ctgname):
+    if "_" in ctgname:
+        return ctgname.split("_")[1]
+    else:
+        return ctgname
+
+
+class Scaffolds:
+    lreads = {}
+    line = ""
+    # init just reads in the input file and stores the longreads
+    # to get scaffold objects call construct_scaffolds
+    def __init__(self, inputfilename, pafformat, blacklist, line):
+        self.line = line
+        with open(inputfilename) as f:
+            for line in f:
+                if pafformat:
+                    [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
+                    strand = 0 if strandstring == "+" else 1
+                else:
+                    [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+                    if part["strand"] == 1: # workaround for misleading coordinates in erates file
+                        tmp = lenc - ecc
+                        ecc = lenc - scc
+                        scc = tmp
+                data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                if blacklist:
+                    if rid in blacklist:
+                        if "all" in blacklist[rid]:
+                            continue
+                        elif ctg in blacklist[rid]:
+                            continue
+                    if shortname(ctg) in blacklist:
+                        continue
+                if rid in self.lreads:
+                    self.lreads[rid]["maps"].append(data)
+                    if int(ecr) > self.lreads[rid]["rm_ecr"]:
+                        self.lreads[rid]["rm_ecr"] = int(ecr)
+                    if int(scr) < self.lreads[rid]["lm_scr"]:
+                        self.lreads[rid]["lm_scr"] = int(scr)
+                else:
+                    self.lreads[rid] = {}
+                    self.lreads[rid]["length"] = int(lenr)
+                    self.lreads[rid]["maps"] = [data]
+                    self.lreads[rid]["rm_ecr"] = int(ecr)
+                    self.lreads[rid]["lm_scr"] = int(scr)
+    
+    def filter_contigcounts(self, nr):
+        toremove = set()
+        for rid,read in self.lreads.items():
+            counter = 0
+            for item in read["maps"]:
+                if self.line in item["name"]:
+                    counter +=1
+            
+            if counter < nr:
+                toremove.add(rid)
+        for rid in toremove:
+            del(self.lreads[rid])
+    
+    def construct_scaffolds(self, contigs):
+        scaffolds = {}
+        for rid in self.lreads:
+            nscaff = Scaffold.init_from_LR((rid,self.lreads[rid]),self.line, contigs )
+            scaffolds[id(nscaff)] = nscaff
+        return scaffolds
+        
+        
+
 class Scaffold:
     cluster_counter = 0
     linename = None
@@ -37,22 +106,8 @@ class Scaffold:
         #lr_info[lr[0]] = lr[1]
         self.in_mergefile = False
 
-    def shortname(self, ctgname):
-        if "_" in ctgname:
-            return ctgname.split("_")[1]
-        else:
-            return ctgname
 
     
-    def delete(self):
-        for ctg in self.contigset:
-            contig2scaffold[ctg].remove(id(self))
-            if contig2scaffold[ctg] == []:
-                del(contig2scaffold[ctg])
-            if not ctg in contigs:
-                contigs[ctg] = allcontigs[ctg]
-        del(scaffolds[self.idx])
-
     def print_contigset(self):
         sortedcontigs = sorted(self.contigset, key = lambda item: int(item.rstrip(self.linename)))
         for contig in sortedcontigs:
@@ -90,8 +145,8 @@ class Scaffold:
             new_right_coords[contig] = self.length - self.left_coords[contig] 
             new_left_coords[contig] = self.length - self.right_coords[contig] 
             new_orientation[contig] = 0 if self.orientation[contig] == 1 else 1
-            new_left_coords_contig[contig] = contigs[self.shortname(contig)] - self.right_coords_contig[contig]
-            new_right_coords_contig[contig] = contigs[self.shortname(contig)] - self.left_coords_contig[contig]
+            new_left_coords_contig[contig] = contigs[shortname(contig)] - self.right_coords_contig[contig]
+            new_right_coords_contig[contig] = contigs[shortname(contig)] - self.left_coords_contig[contig]
         self.left_coords = new_left_coords
         self.right_coords = new_right_coords
         self.left_coords_contig = new_left_coords_contig
@@ -143,9 +198,9 @@ class Scaffold:
         return(sortedcontigs[-1])
 
     # length that takes into account that the end of the scaffold could be extended by a mapping contig
-    def get_virtual_length(self):
+    def get_virtual_length(self, contigs):
         rctg = self.get_rightmost_contig()
-        rest =  allcontigs[rctg] - self.right_coords_contig[rctg]
+        rest =  contigs[rctg] - self.right_coords_contig[rctg]
         return max(self.length ,self.right_coords[rctg] + rest)
 
     def find_conflicts(self):
@@ -187,8 +242,19 @@ class Scaffold:
             space_right = self.left_coords[ctgr] - self.right_coords[ctg]
             space = space_left + space_right
             #print(self.right_coords_contig[ctg])
-            if self.right_coords_contig[ctg] - self.left_coords_contig[ctg] + space < 0.5 * contigs[self.shortname(ctg)]:
+            if self.right_coords_contig[ctg] - self.left_coords_contig[ctg] + space < 0.5 * contigs[shortname(ctg)]:
                 toremove.add(ctg)
+        for ctg, ctgr in zip(sctgs[:-1],sctgs[1:]):
+            space_right = self.left_coords[ctgr] - self.right_coords[ctg]
+            rest_right = contigs[shortname(ctg)] - self.right_coords_contig[ctg]
+            if rest_right - space_right > 1000:
+                toremove.add(ctg)
+        for ctgl, ctg in zip(sctgs[:-1],sctgs[1:]):
+            space_left = self.left_coords[ctg] - self.right_coords[ctgl]
+            rest_left = self.left_coords_contig[ctg]
+            if rest_left - space_left > 1000:
+                toremove.add(ctg)
+
         for ctg in toremove:
             self.contigset.remove(ctg)
             del(self.left_coords[ctg])
@@ -239,7 +305,7 @@ class Scaffold:
 
             gradient_idc += 1
             gradient_id = self.name + "_" + str(gradient_idc)
-            lineargrad = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id , x1=-scc/(ecc-scc), x2=1+(contigs[self.shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            lineargrad = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
             if ctgn2.endswith("0") or ctgn2.endswith("1"):
                 col1 = "#FF0000"
                 col2 = "#0000FF"
@@ -261,7 +327,7 @@ class Scaffold:
             lineargrad.add_stop_color("100%",col2)
 
             #leftclip = scc/100
-            #rightclip = (contigs[self.shortname(ctg)]-ecc)/100
+            #rightclip = (contigs[shortname(ctg)]-ecc)/100
             img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id + ')'))
             #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             yt = yoff + ypos + next(ctg_relative_positions)
@@ -373,17 +439,17 @@ class Scaffold:
         else:
             return False
     
-    def merge_sr(self, ctg1, ctg2, distance, mergefile = None):
+    def merge_sr(self, ctg1, ctg2, scaf1, scaf2, distance, contigs, mergefile = None):
         try:
             assert(ctg1 in self.contigset or ctg1 in self.contigset_sr)
         except AssertionError:
             print( ctg1 + " is not in " + id(self))
-        scaf1 = scaffolds[contig2scaffold[ctg1][0]]
-        scaf2 = scaffolds[contig2scaffold[ctg2][0]]
+        #scaf1 = scaffolds[contig2scaffold[ctg1][0]]
+        #scaf2 = scaffolds[contig2scaffold[ctg2][0]]
         if id(scaf1) != id(self):
             print("Problem with ids. self :" + str(id(self)) + " scaf1: " + str(id(scaf1)))
-        vlength = self.get_virtual_length()
-        e = allcontigs[ctg1] - scaf1.right_coords_contig[ctg1] + distance + scaf2.left_coords_contig[ctg2]
+        vlength = self.get_virtual_length(contigs)
+        e = contigs[ctg1] - scaf1.right_coords_contig[ctg1] + distance + scaf2.left_coords_contig[ctg2]
         offset = scaf1.right_coords[ctg1] + e
         lr_dist = offset - scaf2.left_coords[ctg2]
         nlength = lr_dist + scaf2.length
@@ -401,12 +467,12 @@ class Scaffold:
             self.left_coords_contig[ctg] = coord 
         for ctg,coord in scaf2.right_coords_contig.items():
             self.right_coords_contig[ctg] = coord 
-        for ctg in scaf2.contigset:
-            contig2scaffold[ctg] = [id(self)]
-            self.contigset.add(ctg)
-        for ctg in scaf2.contigset_sr:
-            contig2scaffold[ctg] = [id(self)]
-            self.contigset_sr.add(ctg)
+        #for ctg in scaf2.contigset:
+        #    contig2scaffold[ctg] = [id(self)]
+        #    self.contigset.add(ctg)
+        #for ctg in scaf2.contigset_sr:
+        #    contig2scaffold[ctg] = [id(self)]
+        #    self.contigset_sr.add(ctg)
         for lr,coords in scaf2.longread_coords.items():
             self.longread_coords[lr] = [coords[0] + offset, coords[1] + offset]
         for ctg,ori in scaf2.orientation.items():
@@ -423,7 +489,8 @@ class Scaffold:
         self.length = nlength
         self.name = newname
         #del(contig2scaffold[ctg2][0])
-        del(scaffolds[id(scaf2)])
+        #del(scaffolds[id(scaf2)])
+        return True
 
 
 
@@ -811,11 +878,8 @@ class Scaffold:
                     self.print_coords()
         print(actions)
         
-                
-
-    
     @classmethod
-    def init_from_LR(cls,lr,linename,paf,contigs):
+    def init_from_LR(cls,lr,linename,contigs):
         newinst = cls()
         newinst.turned_around = False
         newinst.in_mergefile = False
@@ -836,14 +900,14 @@ class Scaffold:
         newinst.longread_coords = dict()
         newinst.longread_coords[lr[0]] = [1, lr[1]["length"]]
         for part in lr[1]["maps"]:
-            ctg = part["contig"]
+            ctg = part["name"]
             if ctg.endswith(newinst.linename):
                 if ctg in newinst.contigset:
                     lold = abs(newinst.right_coords[ctg] - newinst.left_coords[ctg])
                     lnew = abs(part["ecr"]-part["scr"])
                     if lnew < lold: # ignore this contig-map, because it is smaller than the previous one
                         continue
-                    if lnew < 300:# if only 20% of the contig is mapped and it is small 
+                    if lnew < 300:
                         continue
                 else:
                     newinst.contigset.add(ctg)
@@ -855,44 +919,11 @@ class Scaffold:
             if ctg.startswith("chr"):
                 continue
 
-            
-            if part["strand"] == 1 and not paf:
-                # workaround for misleading coordinates in erates file
-                newinst.left_coords_contig[ctg] = part["lenc"] - part["ecc"]
-                newinst.right_coords_contig[ctg] = part["lenc"] - part["scc"]
-                startcr = part["ecr"]
-                endcr = part["scr"]
-            else:
-                newinst.left_coords_contig[ctg] = part["scc"]
-                newinst.right_coords_contig[ctg] = part["ecc"]
-                startcr = part["scr"]
-                endcr = part["ecr"]
-            """
-            if newinst.coords[startcr] != ("","",""):
-                if newinst.coords[startcr][0] == "start":
-                    print("Problem with coordinates, start")
-                elif newinst.coords[startcr][0] == "end":
-                    ctgstring = newinst.coords[startcr][1] + "," + ctg
-                    ctgcoords = str(newinst.coords[startcr][2]) + "," + str(newinst.right_coords_contig[ctg])
-                    newinst.coords[startcr] = ("end-start", ctgstring,ctgcoords)
-                else:
-                    print("Problem with coordinates, end-start")
-            else:
-                newinst.coords[startcr] = ("start",ctg,newinst.left_coords_contig[ctg])
-            
-            if newinst.coords[endcr] != ("","",""):
-                if newinst.coords[endcr][0] == "start":
-                    ctgstring = ctg + "," + newinst.coords[endcr][1]
-                    ctgcoords = str(newinst.right_coords_contig[ctg]) + "," + str(newinst.coords[endcr][2])
-                    newinst.coords[endcr] = ("end-start", ctgstring, ctgcoords)
-                elif newinst.coords[endcr][0] == "end":
-                    print("Problem with coordinates, end")
-                else:
-                    print("Problem with coordinates, end-start")
-            else:
-                newinst.coords[endcr] = ("end",ctg, newinst.right_coords_contig[ctg])
-            """
             # checking whether the contig is already part of another scaffold happens during merging procedure
+            newinst.left_coords_contig[ctg] = part["scc"]
+            newinst.right_coords_contig[ctg] = part["ecc"]
+            startcr = part["scr"]
+            endcr = part["ecr"]
 
             # The orientation of the read is needed.
             # Contigs are somewhat well defined with respect to

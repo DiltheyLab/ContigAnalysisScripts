@@ -10,12 +10,8 @@ from operator import itemgetter
 from itertools import combinations, cycle, product
 from collections import defaultdict
 import svgwrite
-#import logging
-#from logging import info
 import squarify
-from scaffold import Scaffold
-
-#logging.basicConfig(filename='mergers.log',level=logging.INFO)
+from scaffold import Scaffold, Scaffolds
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
@@ -55,22 +51,15 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
     ctgpos[read.id] = pos
 
 
-blacklist = {}
-blacklist_fullread = set()
-blacklist_contigs = set()
+blacklist = defaultdict(list)
 if args.blacklistfile:
     with open(args.blacklistfile) as f:
         for line in f:
             sline = line.split()
             if sline[0] == "contig":
-                blacklist_contigs.add(sline[1])
-            if sline[1] == "all":
-                blacklist_fullread.add(sline[0])
+                blacklist[sline[1]] = "y"
             else:
-                if sline[0] in blacklist:
-                    blacklist[sline[0]].append(sline[1])
-                else:
-                    blacklist[sline[0]] = [sline[1]]
+                blacklist[sline[0]].append(sline[1])
 #print(blacklist)
 
 def get_other_relpos(relpos):
@@ -100,7 +89,7 @@ if args.summaryfile:
                 continue
             ctg1 = sline[0].split("_")[0].strip("+").strip("-")
             ctg2 = sline[0].split("_")[1].strip("+").strip("-")
-            if ctg1 in blacklist_contigs or ctg2 in blacklist_contigs:
+            if ctg1 in blacklist or ctg2 in blacklist:
                 continue
             ori1 = sline[0].split("_")[0][0]
             ori2 = sline[0].split("_")[1][0]
@@ -149,74 +138,38 @@ def shortname(ctgname):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
-# nanopore read info
-with open(args.efile) as f:
-    for line in f:
-        if (args.paf):
-            [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc] = line.split()[0:9]
-            strand = 0 if strandstring == "+" else 1
-        else:
-            sline = line.split()
-            rid = sline[0]
-            ctg = sline[1]
-            strand = int(sline[8])
-            scr = int(sline[5])
-            ecr = int(sline[6])
-            lenr = int(sline[7])
-            scc = int(sline[9])
-            ecc = int(sline[10])
-            lenc = int(sline[11])
-        payload = {"contig":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-        if ctg in blacklist_contigs:
-            continue
-        elif rid in blacklist:
-            if ctg in blacklist[rid]:
-                continue
-        elif rid in blacklist_fullread:
-            continue
-        if rid in reads:
-            reads[rid]["maps"].append(payload)
-        else:
-            reads[rid] = {}
-            reads[rid]["length"] = int(lenr)
-            reads[rid]["maps"] = [payload]
+lrs = Scaffolds(args.efile, args.paf, blacklist, args.linename)
+lrs.filter_contigcounts(args.mincontigs)
+scaffolds = lrs.construct_scaffolds(allcontigs)
 
-scaffolds = {}
-# get interesting reads
-# and sort contigs by left coordinate
-greadst = {}
-for rid in reads:
-    counter = 0
-    for item in reads[rid]["maps"]:
-        if item["contig"].endswith(args.linename):
-            counter +=1
-            if counter >= args.mincontigs:
-                greadst[rid] = reads[rid]
-                break
-
-for rid in greadst:
-    nscaff = Scaffold.init_from_LR((rid,reads[rid]),args.linename, args.paf, allcontigs )
-    for ctg in nscaff.contigset:
+#scaffolds = {}
+#for rid in scafs.lreads:
+    #nscaff = Scaffold.init_from_LR((rid,scafs.lreads[rid]),args.linename, args.paf, allcontigs )
+for scafid, scaf in scaffolds.items():
+    for ctg in scaf.contigset:
         if ctg.endswith(args.linename):
-            contig2scaffold[ctg].append(id(nscaff))
+            contig2scaffold[ctg].append(id(scaf))
         
     #nscaff.get_sequence_th()
     #nscaff.add_seq_info()
-    scaffolds[id(nscaff)] = nscaff
+    #scaffolds[id(nscaff)] = nscaff
 
 
 toRemove = set()
 for idx,scaf in scaffolds.items():
     #find and get rid of conflicting scaffolds
-    if scaf.find_conflicts():
-        toRemove.add(idx)
+    #if scaf.find_conflicts():
+    #    toRemove.add(idx)
     octgs = scaf.remove_overlapped_contigs(allcontigs)
     sctgs = scaf.remove_short_contigs(allcontigs)
     for ctg in octgs | sctgs:
         contig2scaffold[ctg].remove(idx)
+    if len(scaf.contigset) == 0:
+        toRemove.add(idx)
+        
     
 for idx in toRemove:
-    scaffolds[idx].delete()
+    del(scaffolds[idx])
     
 
 
@@ -389,11 +342,21 @@ if args.summaryfile:
                     scaf1 = scaffolds[contig2scaffold[ctg1][0]]
                     if scaf1.name == scaf2.name:
                         continue
-                    scaffold.merge_sr(ctg1,ctg2n,ctg2d,args.mergefile)
+                    if scaffold.merge_sr(ctg1,ctg2n,scaf1, scaf2, ctg2d,allcontigs, args.mergefile):
+                        del(scaffolds[id(scaf2)])
+                        for ctg in scaf2.contigset:
+                            contig2scaffold[ctg] = [id(scaf1)]
+                            scaf1.contigset.add(ctg)
+                        for ctg in scaf2.contigset_sr:
+                            contig2scaffold[ctg] = [id(scaf1)]
+                            scaf1.contigset_sr.add(ctg)
+        
+                    
                     change = True
                     break
                 elif ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
-                    print("Probably " + ctg1 + " fits on " + scaf2.name + " left of " + ctg2n)
+                    #print("Probably " + ctg1 + " fits on " + scaf2.name + " left of " + ctg2n)
+                    pass
                 else:
                     scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0, allcontigs, args.mergefile)
                     contig2scaffold[ctg2n].append(id(scaffold))
@@ -429,7 +392,6 @@ if args.contigsmergefile:
             for ctg1, ctg2 in zip(sortedcontigs[:-1], sortedcontigs[1:]):
                 cmergef.write(ctg1+ "\t" + ctg2 + "\n")
             
-
 # Draw all scaffolds
 lrsr_lengths = []
 lrsr_lengths.append([])
@@ -455,6 +417,4 @@ squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
 plt.axis('off')
 plt.title('after long + short read scaffolding')
 plt.show()
-
-
 
