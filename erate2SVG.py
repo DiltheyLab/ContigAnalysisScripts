@@ -7,8 +7,7 @@ from random import sample
 from svgwrite.container import Group
 from Bio import SeqIO
 from collections import defaultdict
-
-from scaffold import Scaffold
+from scaffold import Scaffold, Scaffolds
 
 
 parser = ArgumentParser()
@@ -24,11 +23,7 @@ parser.add_argument("output", help="SVG output file")
 
 args = parser.parse_args()
 
-lreads ={}
-greads = {}
-cgreads = []
-
-#blacklist of long reads
+# blacklist of long reads
 blacklist = defaultdict(set)
 blacklist_contigs = set()
 if args.blacklist:
@@ -45,77 +40,16 @@ contigs = {}
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
-# paf format 
-with open(args.inputfile) as f:
-    for line in f:
-        if args.paf:
-            [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
-            #print(strandstring)
-            if strandstring == "+":
-                strand = 0
-            else:
-                strand = 1
-        else:
-            [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-        data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-        if args.blacklist:
-            if rid in blacklist:
-                if "all" in blacklist[rid]:
-                    continue
-                elif ctg in blacklist[rid]:
-                    continue
-            if ctg in blacklist_contigs:
-                continue
-        if rid in lreads:
-            lreads[rid]["maps"].append(data)
-            if int(ecr) > lreads[rid]["rm_ecr"]:
-                lreads[rid]["rm_ecr"] = int(ecr)
-            if int(scr) < lreads[rid]["lm_scr"]:
-                lreads[rid]["lm_scr"] = int(scr)
-        else:
-            lreads[rid] = {}
-            lreads[rid]["length"] = int(lenr)
-            lreads[rid]["maps"] = [data]
-            lreads[rid]["rm_ecr"] = int(ecr)
-            lreads[rid]["lm_scr"] = int(scr)
 
-# get interesting reads
-greadst = {}
-intreads = {}
-greads_contigset = set()
-intreads_contigset = set()
+scafs = Scaffolds(args.inputfile, args.paf, blacklist, args.linename)
+scafs.filter_contigcounts(args.mincontigs)
+lreads = scafs.lreads
+scaffolds = scafs.construct_scaffolds(contigs)
 
-for rid, read in lreads.items():
-    counter = 0
-    for item in read["maps"]:
-        if item["name"].endswith(args.linename):
-            counter += 1
-    if counter >= int(args.mincontigs):
-        greadst[rid] = read
-        for item in read["maps"]:
-            if item["name"].endswith(args.linename):
-                greads_contigset.add(item["name"])
-    #if counter == 1:
-    #    intreads[rid] = read
-    #    for item in read["maps"]:
-    #        if item["name"].endswith(args.linename):
-    #            intreads_contigset.add(item["name"])
-            
-#intersection = greads_contigset.intersection(intreads_contigset)
-#sintersection = sorted(intersection, key = lambda x: int(x.rstrip(args.linename)))
-#print(sintersection)
-
-
-for rid in intreads:
-    if len(intreads[rid]["maps"]) == 1:
-        pass
-        #print("\t".join([rid, str(intreads[rid])]))
-        
-
-greadst.update(intreads)
+#greadst.update(intreads)
 
 # turn reads around if necessary
-for rid, lr in greadst.items():
+for rid, lr in lreads.items():
     bw = 0
     fw = 0
     for mapping in lr["maps"]:
@@ -151,13 +85,12 @@ for rid, lr in greadst.items():
 
 
 # sort contigs by left coordinate
-for rid in greadst:
+for rid in lreads:
     soverlaps = sorted(lreads[rid]["maps"], key = itemgetter("scr"))
-    greads[rid] = greadst[rid]
-    greads[rid]["maps"]=soverlaps
+    lreads[rid]["maps"]=soverlaps
 
-ogreads = greads.copy()
-print("length greads: " + str(len(greads)))
+ogreads = lreads.copy()
+print("length lreads: " + str(len(lreads)))
 
 
 # cluster np-reads or only keep whitelisted ones
@@ -171,21 +104,21 @@ if(args.whitelist):
             whitelist.add(line.strip())
             
     creads[0] = {}
-    for rid,read in greads.items():
+    for rid,read in lreads.items():
         for mapping in read["maps"]:
             if mapping["name"] in whitelist:
                 creads[0][rid] = read
 else:
-    while len(greads) > 0:
+    while len(lreads) > 0:
         clusternr += 1
         current_cluster = {}
         current_contigs = set()
         # take a random read and build a cluster from it
 
-        ck = sample(greads.keys(),1)[0]
+        ck = sample(lreads.keys(),1)[0]
         #print(ck)
-        cr = (ck, greads[ck])
-        #cr = greads.popitem()
+        cr = (ck, lreads[ck])
+        #cr = lreads.popitem()
         current_cluster[cr[0]] = cr[1]
         #for contig in cr[1]["maps"]:
         #    if not contig["name"].startswith("chr"):
@@ -197,15 +130,15 @@ else:
             for contig in cr[1]["maps"]:
                 if not contig["name"].startswith("chr"):
                     current_contigs.add(contig["name"])
-            del(greads[cr[0]])
+            del(lreads[cr[0]])
             #print("contigs: " + str(current_contigs))
-            for readid,readval in greads.items():
+            for readid,readval in lreads.items():
                 contig_found = False
                 for contig in readval["maps"]:
                     if contig["name"] in current_contigs:
                         contig_found = True
                         current_cluster[readid] = readval
-                        cr = (readid, greads[readid])
+                        cr = (readid, lreads[readid])
                         break
                 if contig_found:
                     break
@@ -246,7 +179,7 @@ def get_distances(lr1,lr2, common_ctgs):
 #lr_dist = defaultdict(lambda:([],[]))
 lr_dists = {}
 #initialize matrix
-for lid, read in lreads.items():
+for lid, read in ogreads.items():
     lr_dists[lid] = {lid:0}
 
 if args.alignreads:
@@ -307,7 +240,6 @@ if args.alignreads:
                 nsrid = rid2
         
         sorted_reads[cluster] = sorted(creads[cluster].keys(), key=lambda x: lr_dists[srid][x])
-
 
         # store resulsts of this
         creads[cluster]["smallest_id"] = srid #for this id all values are present in lr_dists
