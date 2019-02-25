@@ -5,21 +5,24 @@ import pandas as pd
 import numpy as np
 import sys
 from itertools import combinations
+from scaffold import Scaffolds
 
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig distance summary file")
-parser.add_argument("cellline", help="Name of cell line")
+parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 parser.add_argument("--include_ambigious", help="Include ambigious contigs", action="store_true", default=False)
 
 args = parser.parse_args()
 
 
+
 reads = {}
 greads = {}
 cgreads = []
+ambigious_contigs = set()
 
 blacklist = {}
 blacklist_fullread = set()
@@ -34,54 +37,13 @@ if args.blacklistfile:
                 blacklist_fullread.add(sline[0])
             else:
                 blacklist[sline[0]] = sline[1]
-ambigious_contigs = set()
 
-# nanopore read info
-with open(args.efile) as f:
-    for line in f:
-        sline = line.split()
-        rid = sline[0]
-        ctg = sline[1]
-        strand = int(sline[8])
-        scr = int(sline[5])
-        ecr = int(sline[6])
-        scc = int(sline[9])
-        ecc = int(sline[10])
-        lc = int(sline[11])
-        payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lc":lc}
-        if ctg.startswith("b_") or ctg.startswith("c_"):
-            ambigious_contigs.add(ctg.split("_")[1])
-        if ctg in blacklist_contigs:
-            continue
-        elif rid in blacklist:
-            if blacklist[rid] == ctg:
-                continue
-        elif rid in blacklist_fullread:
-            continue
-
-        if rid in reads:
-            reads[rid]["overlaps"].append(payload)
-        else:
-            reads[rid] = {}
-            reads[rid]["length"] = int(sline[7])
-            reads[rid]["overlaps"] = [payload]
-
-# get interesting reads
-greadst = {}
-for rid in reads:
-    counter = 0
-    for item in reads[rid]["overlaps"]:
-        if item["contig"].endswith(args.cellline):
-            counter += 1
-    if counter >= 2:
-        greadst[rid] = reads[rid]
+lrs = Scaffolds(args.efile, False, blacklist, args.linename)
+lrs.filter_contigcounts(2)
+lrs.turn_longreads_around()
+lrs.sort_contigs_in_reads()
+lrs = lrs.lreads
             
-# sort contigs by left coordinate
-for rid in greadst:
-    #print(reads[rid]["overlaps"])
-    soverlaps = sorted(reads[rid]["overlaps"], key = itemgetter("scr"))
-    greads[rid] = greadst[rid]
-    greads[rid]["overlaps"]=soverlaps
 
 #print(greads)
 
@@ -111,7 +73,7 @@ for rid in greads:
             distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
         else:
             continue
-        if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
+        if int(ovold["contig"].rstrip(args.linename)) < int(ovnew["contig"].rstrip(args.linename)):
             cstring = ovold["contig"] + "_" + ovnew["contig"]
         else:
             cstring = ovnew["contig"] + "_" + ovold["contig"]
@@ -124,28 +86,21 @@ for rid in greads:
 '''
 
 # get distances of all overlaps
-for rid in greads:
-    for combo in combinations(greads[rid]['overlaps'], 2):
-        ovnew = combo[1]
-        ovold = combo[0]
-        if ovnew["contig"].startswith("chr") or ovold["contig"].startswith("chr"):
+for rid in lrs:
+    for item in combinations(lrs[rid]['maps'], 2):
+        ovold, ovnew = item
+        if ovnew["name"].startswith("chr") or ovold["name"].startswith("chr"):
             continue
-        if ovnew["contig"] in ambigious_contigs or ovold["contig"] in ambigious_contigs:
+        if ovnew["name"] in ambigious_contigs or ovold["name"] in ambigious_contigs:
             continue
-        if "_" in ovnew["contig"] or "_" in ovold["contig"]:
+        if "_" in ovnew["name"] or "_" in ovold["name"]:
             continue
-        if ovnew["contig"] == ovold["contig"]:
+        if ovnew["name"] == ovold["name"]:
             continue
-        if ovnew["strand"] == ovold["strand"]:
-            distance = ovnew["scr"] - ovold["ecr"]- (ovold["lc"] - ovold["ecc"]) - ovnew["scc"] + 1
-        else:
+        if ovnew["strand"] == 1 or ovold["strand"] == 1:
             continue
-        #if abs(distance) > 2000:
-        #    continue
-        #if int(ovold["contig"].rstrip(args.cellline)) < int(ovnew["contig"].rstrip(args.cellline)):
-        cstring = ovold["contig"] + "_" + ovnew["contig"]
-        #else:
-        #    cstring = ovnew["contig"] + "_" + ovold["contig"]
+        distance = ovnew["scr"] - ovold["ecr"]- (ovold["lenc"] - ovold["ecc"]) - ovnew["scc"] + 1
+        cstring = ovold["name"] + "_" + ovnew["name"]
         if cstring in distances:
             distances[cstring].append(distance)
         else:
@@ -174,7 +129,7 @@ with open(args.summaryfile) as f:
         if float(sline[4]) > 2:
             continue
         moddist = float(sline[1])
-        #if int(ctg1.rstrip(args.cellline)) < int(ctg2.rstrip(args.cellline)):
+        #if int(ctg1.rstrip(args.linename)) < int(ctg2.rstrip(args.linename)):
         cstr = ctg1+"_"+ctg2
         #else:
         #    cstr = ctg2+"_"+ctg1
@@ -183,6 +138,14 @@ with open(args.summaryfile) as f:
                 distances2[cstr] = moddist
         else:    
             distances2[cstr] = moddist
+
+for name, dist in distances.items():
+    if name in distances2:
+        dist2 = distances2[name]
+    else:
+        dist2 = "-"
+    name1, name2 = name.split("_")
+    print("\t".join([name1, name2, str(dist), str(dist2)]))
             
         
 df = pd.DataFrame.from_dict([distances, distances2])
@@ -201,8 +164,8 @@ for item in dd['longread_mean']:
     sthsth.append(item < 0)
 for idx, item in enumerate(dd['shortread']):
     sthsth[idx] = sthsth[idx] or item < 0
-for name in dd[sthsth].index.values:
-    print(name)
+#for name in dd[sthsth].index.values:
+#    print(name)
 #print(dd[dd['longread_mean'] <= -20])
 #print(dd.index.values)
 
