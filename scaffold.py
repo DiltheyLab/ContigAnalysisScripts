@@ -1,4 +1,5 @@
 from itertools import combinations, cycle
+from collections import defaultdict
 import svgwrite
 import sys
 
@@ -23,9 +24,9 @@ class Scaffolds:
                     strand = 0 if strandstring == "+" else 1
                 else:
                     [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-                    if part["strand"] == 1: # workaround for misleading coordinates in erates file
-                        tmp = lenc - ecc
-                        ecc = lenc - scc
+                    if "strand" == "1": # workaround for misleading coordinates in erates file
+                        tmp = int(lenc) - int(ecc)
+                        ecc = int(lenc) - int(scc)
                         scc = tmp
                 data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
                 if blacklist:
@@ -61,6 +62,15 @@ class Scaffolds:
                 toremove.add(rid)
         for rid in toremove:
             del(self.lreads[rid])
+
+    def filter_small_contigs(self, size):
+        for rid,read in self.lreads.items():
+            toremove = []
+            for item in read["maps"]:
+                if item["ecc"] - item["scc"] < size:
+                    toremove.append(item)
+            for item in toremove:
+                self.lreads[rid]["maps"].remove(item)
     
     def construct_scaffolds(self, contigs):
         scaffolds = {}
@@ -68,7 +78,29 @@ class Scaffolds:
             nscaff = Scaffold.init_from_LR((rid,self.lreads[rid]),self.line, contigs )
             scaffolds[id(nscaff)] = nscaff
         return scaffolds
-        
+
+    def sort_contigs_in_reads(self):
+        # sort contigs by left coordinate
+        for rid in self.lreads:
+            self.lreads[rid]["maps"] = sorted(self.lreads[rid]["maps"], key = lambda x: x["scr"])
+
+    def turn_longreads_around(self):
+        for rid in self.lreads:
+            count0 = 0
+            count1 = 0
+            for contig in self.lreads[rid]["maps"]:
+                if contig["strand"] == 1:
+                    count1 += 1
+                else:
+                    count0 += 1
+            if count1 > count0:
+                length = self.lreads[rid]["length"]
+                for contig in self.lreads[rid]["maps"]:
+                    tmp = contig["scr"]
+                    contig["scr"] = length - contig["ecr"] 
+                    contig["ecr"] = length - tmp
+                    contig["strand"] = 0 if contig["strand"] == 1 else 1
+                
         
 
 class Scaffold:
@@ -493,7 +525,12 @@ class Scaffold:
         return True
 
 
-
+    def get_distance_pairs(self, ctgs):
+        dist_matrix = {}
+        for ctg1, ctg2  in combinations(ctgs, 2):
+            dist_matrix[(ctg1, ctg2)] = (self.left_coords[ctg2] - self.left_coords_contig[ctg2]) - (self.left_coords[ctg1] - self.left_coords_contig[ctg1])
+            dist_matrix[(ctg2, ctg1)] = (self.left_coords[ctg1] - self.left_coords_contig[ctg1]) - (self.left_coords[ctg2] - self.left_coords_contig[ctg2])
+        return dist_matrix
 
     def merge(self,scaf2, mergefile = None):
         for rid, read in scaf2.lr_info.items():
@@ -516,10 +553,45 @@ class Scaffold:
         if different_orientation > same_orientation : 
             pass
 
-        # Sanity Check (hard): contig ordering
-        if not same_ctgs:
-            print(self.name + " " + scaf2.name + " have no common contigs")
+        # Sanity Check (hard): contig ordering -> contig distances
+        def get_pairs_with_proper_distances(scaf1, scaf2, ctgs, tolerance):
+            pairs1 = scaf1.get_distance_pairs(ctgs)
+            #print(pairs1)
+            pairs2 = scaf2.get_distance_pairs(ctgs)
+            #print(pairs2)
+            pairs = set()
+            for pair in pairs1.keys():
+                ldist = abs(pairs1[pair]) if abs(pairs1[pair]) > abs(pairs1[pair]) else abs(pairs2[pair])
+                maxdist = max(int(ldist*tolerance), 4000)
+                if pairs1[pair] > pairs2[pair]:
+                    if pairs1[pair] < pairs2[pair] + maxdist:
+                        pairs.add(pair)
+                else:
+                    if pairs2[pair] < pairs1[pair] + maxdist:
+                        pairs.add(pair)
+            return pairs
+            
+       
+        #if not same_ctgs:
+        #    print(self.name + " " + scaf2.name + " have no common contigs")
         #print(same_ctgs)
+        goodpairs = get_pairs_with_proper_distances(self, scaf2, same_ctgs, 0.6)
+        problempairs = set(combinations(same_ctgs,2)) - goodpairs
+        if problempairs:
+        #    pass
+            print("problempairs: " + str(problempairs))
+            #print("goodpairs: " + str(goodpairs))
+            #print(self.get_distance_pairs(same_ctgs))
+            #print(scaf2.get_distance_pairs(same_ctgs))
+            for ctg1, ctg2 in problempairs:
+                print(self.get_distance_pairs(set([ctg1,ctg2])))
+                print(scaf2.get_distance_pairs(set([ctg1,ctg2])))
+                #print("\t".join([ctg1, str(self.left_coords[ctg1]),str(self.left_coords_contig[ctg1]), ctg2, str(self.left_coords[ctg2]), str(self.left_coords_contig[ctg2])]))
+                #print("\t".join([ctg1, str(scaf2.left_coords[ctg1]),str(scaf2.left_coords_contig[ctg1]), ctg2, str(scaf2.left_coords[ctg2]), str(scaf2.left_coords_contig[ctg2])]))
+            print(self.name + "  " + scaf2.name)
+            print(str(self.lr_info.keys()) + "  " + str(scaf2.lr_info.keys()))
+            sys.exit()
+
         sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])
         if "-".join(sorted_same_ctgs1) != "-".join(sorted_same_ctgs2):
@@ -566,7 +638,7 @@ class Scaffold:
         
 
         def has_similar_mapping_length(scaf1, ctg1, scaf2, ctg2):
-            tolerance = 0.3
+            tolerance = 0.5
             l1 = scaf1.get_ctg_len(ctg1)
             l2 = scaf2.get_ctg_len(ctg2)
             if  l1 == -1:
@@ -593,6 +665,13 @@ class Scaffold:
         ncontigset = self.contigset.copy()
         first_anchor = None
 
+        for ctg in rscaf.contigset - lscaf.contigset:
+            nright_coords_contig[ctg] = rscaf.right_coords_contig[ctg]
+            nleft_coords_contig[ctg] = rscaf.left_coords_contig[ctg]
+        for ctg in lscaf.contigset:
+            nright_coords_contig[ctg] = lscaf.right_coords_contig[ctg]
+            nleft_coords_contig[ctg] = lscaf.left_coords_contig[ctg]
+
         # take same coordinates for contigs on left scaffold
         for ctg in lsorted_ctgs:
             norientation[ctg] = lscaf.orientation[ctg]
@@ -602,10 +681,7 @@ class Scaffold:
         for ctg in rsorted_ctgs:
             if ctg in same_ctgs:
                 first_anchor = ctg
-                if rscaf.is_on_left_edge(ctg):
-                    offset = lscaf.right_coords[ctg] - rscaf.right_coords[ctg]
-                else:
-                    offset = lscaf.left_coords[ctg] - rscaf.left_coords[ctg]
+                offset = (lscaf.left_coords[ctg] - lscaf.left_coords_contig[ctg]) -  (rscaf.left_coords[ctg] - rscaf.left_coords_contig[ctg])
                 break
         # utilize offset for long read info
         for lrid, lrc in rscaf.longread_coords.items():
@@ -615,13 +691,10 @@ class Scaffold:
             norientation[ctg] = rscaf.orientation[ctg]
             if ctg in same_ctgs:
                 last_common_ctg = ctg
-                continue
-            if not last_common_ctg:
-                nright_coords[ctg] = nleft_coords[first_anchor] - (rscaf.left_coords[first_anchor] - rscaf.right_coords[ctg])
-                nleft_coords[ctg] = nright_coords[ctg] - rscaf.get_ctg_len( ctg)
+                offset = (lscaf.left_coords[ctg] - lscaf.left_coords_contig[ctg]) -  (rscaf.left_coords[ctg] - rscaf.left_coords_contig[ctg])
             else:
-                nleft_coords[ctg] = nright_coords[last_common_ctg] + (rscaf.left_coords[ctg] - rscaf.right_coords[last_common_ctg])
-                nright_coords[ctg] = nleft_coords[ctg] + (rscaf.right_coords[ctg] - rscaf.left_coords[ctg])
+                nright_coords[ctg] = rscaf.right_coords[ctg] + offset
+                nleft_coords[ctg] = rscaf.left_coords[ctg] + offset
 
         # Sanity Check (soft): contig spaces
         new_overlapping = 0
@@ -638,6 +711,8 @@ class Scaffold:
         self.length = max(llength, rlength)
         self.contigset = self.contigset.union(scaf2.contigset)
         self.left_coords = nleft_coords
+        self.left_coords_contig = nleft_coords_contig
+        self.right_coords_contig = nright_coords_contig
         self.right_coords = nright_coords
         self.orientation = norientation
         Scaffold.nr_of_scaffolds -= 1
@@ -650,8 +725,10 @@ class Scaffold:
 
         for ctg in scaf2.contigset:
             if ctg in same_ctgs:
-                self.left_coords_contig[ctg] = lscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] < rscaf.left_coords_contig[ctg] else rscaf.left_coords_contig[ctg]
-                self.right_coords_contig[ctg] = lscaf.right_coords_contig[ctg] if lscaf.right_coords_contig[ctg] > rscaf.right_coords_contig[ctg] else rscaf.right_coords_contig[ctg]
+                #self.lef_coords_contig[ctg] = 
+                #self.left_coords_contig[ctg] = lscaf.left_coords_contig[ctg] if lscaf.left_coords_contig[ctg] < rscaf.left_coords_contig[ctg] else rscaf.left_coords_contig[ctg]
+                #self.right_coords_contig[ctg] = lscaf.right_coords_contig[ctg] if lscaf.right_coords_contig[ctg] > rscaf.right_coords_contig[ctg] else rscaf.right_coords_contig[ctg]
+                pass # let's keep the info from the self scaffold
             else:
                 self.left_coords_contig[ctg] = scaf2.left_coords_contig[ctg]
                 self.right_coords_contig[ctg] = scaf2.right_coords_contig[ctg]
@@ -939,8 +1016,6 @@ class Scaffold:
             newinst.turn_around(contigs)    
         # get rid of wrong contigs
         newinst.remove_revcomp_contigs()
-        
-        
         newinst.name = lr[0]
         newinst.idx = id(newinst)
         return newinst

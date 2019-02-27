@@ -140,6 +140,7 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 
 lrs = Scaffolds(args.efile, args.paf, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
+lrs.filter_small_contigs(200)
 scaffolds = lrs.construct_scaffolds(allcontigs)
 
 #scaffolds = {}
