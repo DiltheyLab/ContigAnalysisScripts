@@ -1,16 +1,19 @@
 from argparse import ArgumentParser
 from collections import defaultdict
 import sys
+from Bio import SeqIO
 
 
 parser = ArgumentParser()
 parser.add_argument("inputfile", help="Error rate file or PAF file")
 parser.add_argument("cellline", help="Name of cell line")
 parser.add_argument("sequencefile", help="fastq-inputfile")
+parser.add_argument("contigfile", help="contig input fasta")
+#parser.
+parser.add_argument("outputfile", help="output in fasta")
 parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--blacklist", help="File containing long read ids where certain contig mappings should be ignored.")
 args = parser.parse_args()
-
 
 
 #blacklist of long reads
@@ -25,6 +28,9 @@ if args.blacklist:
                 idx, ctg =  line.strip().split()[0:2]
                 blacklist[idx] = ctg
 
+contigs = {}
+for read in SeqIO.parse(args.contigfile, "fasta"):
+    contigs[read.id] = str(read.seq)
 
 readids = defaultdict(set)
 
@@ -89,7 +95,9 @@ for rid, lr in lreads.items():
                 mapping["ecc"] = mapping["lenc"] - tmp
         reverse.add(rid)
 
-a = readids["756APD"] & readids["1919APD"]
+#a = readids["756APD"] & readids["1919APD"]
+a = readids["547APD"] & readids["855APD"]
+#547APD_855APD
 print(a)
 
 
@@ -107,7 +115,8 @@ def get_coords(lrid, ctg1, ctg2):
 min_ce = -1
 max_cs = -1
 for lrid in a:
-    r1, r2 = get_coords(lrid, "756APD", "1919APD")
+    #r1, r2 = get_coords(lrid, "756APD", "1919APD")
+    r1, r2 = get_coords(lrid, "855APD", "547APD")
     assert(r1 != None)
     assert(r2 != None)
     if min_ce == -1 or r1['ecc'] < min_ce:
@@ -154,22 +163,33 @@ with open(args.sequencefile) as f:
 print("done")
 
 
-for lrid in a:
-    c1, c2 = get_coords(lrid, "756APD", "1919APD")
-    assert(c1 != None)
-    assert(c2 != None)
-    if c1['ecc'] > min_ce:
-        c1['cut_left'] = c1['ecc'] - min_ce # TODO improve with Alex align tool
-    else:
-        c1['cut_left'] = 0
+with open(args.outputfile, "w+") as out:
+    for lrid in a:
+        #c1, c2 = get_coords(lrid, "756APD", "1919APD")
+        c1, c2 = get_coords(lrid, "855APD", "547APD")
+        assert(c1 != None)
+        assert(c2 != None)
+        if c1['ecc'] > min_ce:
+            c1['cut_left'] = c1['ecc'] - min_ce # TODO improve with Alex align tool
+        else:
+            c1['cut_left'] = 0
 
-    if c2['scc'] < max_cs:
-        c2['cut_right'] = max_cs - c2['scc'] # TODO improve with Alex align tool
-    else:
-        c2['cut_right'] = 0
-    leftc = c1['ecr'] + min_ce - c1['ecc']
-    rightc = c2['scr'] - max_cs + c2['scc']
-    print(lrs[lrid][leftc:rightc+1])
-    
+        if c2['scc'] < max_cs:
+            c2['cut_right'] = max_cs - c2['scc'] # TODO improve with Alex align tool
+        else:
+            c2['cut_right'] = 0
+        leftc = c1['ecr'] + min_ce - c1['ecc'] - 20
+        rightc = c2['scr'] - max_cs + c2['scc'] + 20
+        out.write(">" + lrid + "\n")
+        out.write(lrs[lrid][leftc:rightc+1] + "\n")
 
+
+    print(">756APD")
+    print(contigs["756APD"][-40:])
+    print(">1919APD")
+    print(contigs["1919APD"][:40])
+    print(">855APD")
+    print(contigs["855APD"][-40:])
+    print(">547APD")
+    print(contigs["547APD"][:40])
 
