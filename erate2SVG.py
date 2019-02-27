@@ -43,45 +43,11 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 
 scafs = Scaffolds(args.inputfile, args.paf, blacklist, args.linename)
 scafs.filter_contigcounts(args.mincontigs)
+scafs.turn_longreads_around()
 lreads = scafs.lreads
-scaffolds = scafs.construct_scaffolds(contigs)
+
 
 #greadst.update(intreads)
-
-# turn reads around if necessary
-for rid, lr in lreads.items():
-    bw = 0
-    fw = 0
-    for mapping in lr["maps"]:
-        if mapping["name"].endswith(args.linename): 
-            if mapping["strand"] == 1:
-                bw += 1
-            elif mapping["strand"] == 0:
-                fw += 1
-            else:
-                raise ValueError("strand: " + str(mapping["strand"]))
-    if bw > fw:
-        for mapping in lr["maps"]:
-            if mapping["name"].endswith(args.linename): 
-                mapping["strand"] = 1 if mapping["strand"] == 0 else 0
-                tmp = mapping["scr"]
-                mapping["scr"] = lr["length"] - mapping["ecr"]
-                mapping["ecr"] = lr["length"] - tmp
-                if not args.paf:
-                    tmp = mapping["scc"]
-                    mapping["scc"] = mapping["lenc"] - mapping["ecc"]
-                    mapping["ecc"] = mapping["lenc"] - tmp
-        
-    # turn around and redefine wrong contigs
-    for mapping in lr["maps"]:
-        if mapping["name"].endswith(args.linename): 
-            if mapping["strand"] == 1: #define a new contigname and turn it around
-                mapping["name"] = mapping["name"] + "rc"
-                if not args.paf:
-                    tmp = mapping["scc"]
-                    mapping["scc"] = mapping["lenc"] - mapping["ecc"]
-                    mapping["ecc"] = mapping["lenc"] - tmp
-                mapping["strand"] = 0
 
 
 # sort contigs by left coordinate
