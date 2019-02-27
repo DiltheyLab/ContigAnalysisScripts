@@ -6,13 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from operator import itemgetter
 from itertools import combinations
+from scaffold import Scaffolds
 
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
-parser.add_argument("cellline", help="Cell Line")
+parser.add_argument("linename", help="Cell Line")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
 
@@ -30,41 +31,11 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 print("Nr. of scaffolds: " + str(len(contigs)))
 
 
-# nanopore read info
-with open(args.efile) as f:
-    for line in f:
-        sline = line.split()
-        rid = sline[0]
-        ctg = sline[1]
-        strand = int(sline[8])
-        scr = int(sline[5])
-        ecr = int(sline[6])
-        scc = int(sline[9])
-        ecc = int(sline[10])
-        lc = int(sline[11])
-        payload = {"contig":ctg,"strand":strand,"scr":scr,"ecr":ecr,"scc":scc,"ecc":ecc,"lc":lc}
-        if rid in reads:
-            reads[rid]["overlaps"].append(payload)
-        else:
-            reads[rid] = {}
-            reads[rid]["length"] = int(sline[7])
-            reads[rid]["overlaps"] = [payload]
-
-# get interesting reads
-# and sort contigs by left coordinate
-greadst = {}
-for rid in reads:
-    counter = 0
-    for item in reads[rid]["overlaps"]:
-        if item["contig"].endswith(args.cellline):
-            greadst[rid] = reads[rid]
-            break
-for rid in greadst:
-    #print(reads[rid]["overlaps"])
-    soverlaps = sorted(reads[rid]["overlaps"], key = itemgetter("scr"))
-    greads[rid] = greadst[rid]
-    greads[rid]["overlaps"]=soverlaps
-
+lrs = Scaffolds(args.efile, True, None, args.linename)
+lrs.filter_contigcounts(2)
+lrs.turn_longreads_around()
+lrs.sort_contigs_in_reads()
+greads = lrs.lreads
 
 
 
@@ -83,16 +54,16 @@ while len(greads) > 0:
     olen = 0
     while len(current_cluster) != olen:
         olen = len(current_cluster)
-        for contig in cr[1]["overlaps"]:
-            if not contig["contig"].startswith("chr"):
-                contigs.pop(contig["contig"], None)
-                current_contigs.add(contig["contig"])
-                contig2cluster[contig["contig"]] = clusternr
+        for contig in cr[1]["maps"]:
+            if not contig["name"].startswith("chr"):
+                contigs.pop(contig["name"], None)
+                current_contigs.add(contig["name"])
+                contig2cluster[contig["name"]] = clusternr
         for readid,readval in greads.items():
             contig_found = False
-            for contig in readval["overlaps"]:
-                if not contig["contig"].startswith("chr"):
-                    if contig["contig"] in current_contigs:
+            for contig in readval["maps"]:
+                if not contig["name"].startswith("chr"):
+                    if contig["name"] in current_contigs:
                         contig_found = True
                         current_cluster[readid] = readval
                         cr = (readid, greads.pop(readid))
@@ -109,9 +80,9 @@ for i, cluster in creads.items():
     current_contigs = set([])
     for readid,read in cluster.items():
         #print(read)
-        for contig in read["overlaps"]:
-            if not contig["contig"].startswith("chr"):
-                current_contigs.add(contig["contig"])
+        for contig in read["maps"]:
+            if not contig["name"].startswith("chr"):
+                current_contigs.add(contig["name"])
     scaffolds[i] = current_contigs
 #print(scaffolds)
 
@@ -170,7 +141,7 @@ def get_rightmost_contig(scaf_id):
         print("not implemented yet")
     else:
         rid, read = creads[scaf_id].items()
-        for ov in read["overlaps"]:
+        for ov in read["maps"]:
             print(ov)
 
 #get_rightmost_contig(1)
