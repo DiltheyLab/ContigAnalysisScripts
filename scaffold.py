@@ -9,15 +9,26 @@ def shortname(ctgname):
     else:
         return ctgname
 
+def sniff_format(fileh):
+    line = fileh.readline()
+    rid, nameorlen = line.split()[0:2]
+    try:
+        int(nameorlen)
+        return "paf"
+    except:
+        return "erate"
+        
 
 class Scaffolds:
     lreads = {}
     line = ""
+        
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
-    def __init__(self, inputfilename, pafformat, blacklist, line):
+    def __init__(self, inputfilename, blacklist, line, whitelist = None):
         self.line = line
         with open(inputfilename) as f:
+            pafformat = True if sniff_format(f) == "paf" else False
             for line in f:
                 if pafformat:
                     [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
@@ -29,6 +40,9 @@ class Scaffolds:
                         ecc = int(lenc) - int(scc)
                         scc = tmp
                 data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                if whitelist:
+                    if rid not in whitelist:
+                        continue
                 if blacklist:
                     if rid in blacklist:
                         if "all" in blacklist[rid]:
@@ -49,6 +63,7 @@ class Scaffolds:
                     self.lreads[rid]["maps"] = [data]
                     self.lreads[rid]["rm_ecr"] = int(ecr)
                     self.lreads[rid]["lm_scr"] = int(scr)
+
     
     def filter_contigcounts(self, nr):
         toremove = set()
@@ -528,8 +543,13 @@ class Scaffold:
     def get_distance_pairs(self, ctgs):
         dist_matrix = {}
         for ctg1, ctg2  in combinations(ctgs, 2):
-            dist_matrix[(ctg1, ctg2)] = (self.left_coords[ctg2] - self.left_coords_contig[ctg2]) - (self.left_coords[ctg1] - self.left_coords_contig[ctg1])
-            dist_matrix[(ctg2, ctg1)] = (self.left_coords[ctg1] - self.left_coords_contig[ctg1]) - (self.left_coords[ctg2] - self.left_coords_contig[ctg2])
+            if self.left_coords[ctg1] > self.left_coords[ctg2]:
+                lctg, rctg = [ctg1, ctg2]
+            else:
+                rctg, lctg = [ctg1, ctg2]
+            dist = self.left_coords[rctg] - self.left_coords_contig[rctg] - self.left_coords[lctg] + self.left_coords_contig[lctg]
+            dist_matrix[(lctg, rctg)] = dist
+            dist_matrix[(rctg, lctg)] = -dist
         return dist_matrix
 
     def merge(self,scaf2, mergefile = None):
@@ -571,7 +591,6 @@ class Scaffold:
                         pairs.add(pair)
             return pairs
             
-       
         #if not same_ctgs:
         #    print(self.name + " " + scaf2.name + " have no common contigs")
         #print(same_ctgs)
@@ -583,13 +602,18 @@ class Scaffold:
             #print("goodpairs: " + str(goodpairs))
             #print(self.get_distance_pairs(same_ctgs))
             #print(scaf2.get_distance_pairs(same_ctgs))
+            print(self.contigset & scaf2.contigset)
+            print(self.left_coords)
+            print(self.left_coords_contig)
+            print(scaf2.left_coords)
+            print(scaf2.left_coords_contig)
             for ctg1, ctg2 in problempairs:
                 print(self.get_distance_pairs(set([ctg1,ctg2])))
                 print(scaf2.get_distance_pairs(set([ctg1,ctg2])))
                 #print("\t".join([ctg1, str(self.left_coords[ctg1]),str(self.left_coords_contig[ctg1]), ctg2, str(self.left_coords[ctg2]), str(self.left_coords_contig[ctg2])]))
                 #print("\t".join([ctg1, str(scaf2.left_coords[ctg1]),str(scaf2.left_coords_contig[ctg1]), ctg2, str(scaf2.left_coords[ctg2]), str(scaf2.left_coords_contig[ctg2])]))
             print(self.name + "  " + scaf2.name)
-            print(str(self.lr_info.keys()) + "  " + str(scaf2.lr_info.keys()))
+            #print(str(self.lr_info.keys()) + "  " + str(scaf2.lr_info.keys()))
             sys.exit()
 
         sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
@@ -1011,9 +1035,9 @@ class Scaffold:
             else:
                 orientation1 +=1
                 newinst.orientation[ctg] = 1
-        # turn scaffold around if needed
-        if orientation0 < orientation1:
-            newinst.turn_around(contigs)    
+        # turn scaffold around if needed -> now done on the long read level
+        #if orientation0 < orientation1:
+        #    newinst.turn_around(contigs)    
         # get rid of wrong contigs
         newinst.remove_revcomp_contigs()
         newinst.name = lr[0]
