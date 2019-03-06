@@ -15,7 +15,7 @@ from scaffold import Scaffold, Scaffolds
 
 parser = ArgumentParser()
 parser.add_argument("efile", help="Error rate file")
-parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
+#parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
@@ -139,7 +139,7 @@ def shortname(ctgname):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
-lrs = Scaffolds(args.efile, args.paf, blacklist, args.linename)
+lrs = Scaffolds(args.efile, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
 lrs.filter_small_contigs(300)
 lrs.turn_longreads_around()
@@ -147,7 +147,7 @@ scaffolds = lrs.construct_scaffolds(allcontigs)
 
 #scaffolds = {}
 #for rid in scafs.lreads:
-    #nscaff = Scaffold.init_from_LR((rid,scafs.lreads[rid]),args.linename, args.paf, allcontigs )
+    #nscaff = Scaffold.init_from_LR((rid,scafs.lreads[rid]),args.linename, allcontigs )
 for scafid, scaf in scaffolds.items():
     for ctg in scaf.contigset:
         if ctg.endswith(args.linename):
