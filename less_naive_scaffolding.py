@@ -62,6 +62,7 @@ if args.blacklistfile:
                 blacklist[sline[0]].append(sline[1])
 #print(blacklist)
 
+
 def get_other_relpos(relpos):
     if relpos == "left":
         return "right"
@@ -140,7 +141,8 @@ print("Nr. of scaffolds: " + str(len(contigs)))
 
 lrs = Scaffolds(args.efile, args.paf, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
-lrs.filter_small_contigs(200)
+lrs.filter_small_contigs(300)
+lrs.turn_longreads_around()
 scaffolds = lrs.construct_scaffolds(allcontigs)
 
 #scaffolds = {}
