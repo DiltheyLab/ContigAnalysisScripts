@@ -7,15 +7,17 @@ import numpy as np
 from operator import itemgetter
 from itertools import combinations
 from scaffold import Scaffolds
+from collections import defaultdict
 
 
 parser = ArgumentParser()
-parser.add_argument("efile", help="Error rate file")
+parser.add_argument("inputfiles", help="Input files", nargs="+")
 parser.add_argument("summaryfile", help="Contig Distance Summary file")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Cell Line")
 #parser.add_argument("--maxdev", help="Maximal deviation", type=float, default=2.0)
 parser.add_argument("--mindepth", help="Minimal depth", type=int, default=20)
+parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 
 args = parser.parse_args()
 
@@ -30,8 +32,17 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
+blacklist = defaultdict(list)
+if args.blacklistfile:
+    with open(args.blacklistfile) as f:
+        for line in f:
+            sline = line.split()
+            if sline[0] == "contig":
+                blacklist[sline[1]] = "y"
+            else:
+                blacklist[sline[0]].append(sline[1])
 
-lrs = Scaffolds(args.efile, True, None, args.linename)
+lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(2)
 lrs.turn_longreads_around()
 lrs.sort_contigs_in_reads()
@@ -102,6 +113,8 @@ print("scaffolding short reads ....")
 with open(args.summaryfile) as f:
     for line in f:
         sline = line.split()
+        if len(sline[0].split("_")) < 2:
+            print("Problem with line: " + str(line.rstrip()))
         ctg1 = sline[0].split("_")[0].strip("+").strip("-")
         ctg2 = sline[0].split("_")[1].strip("+").strip("-")
         if sline[1] == "NA":

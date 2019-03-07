@@ -14,7 +14,7 @@ import squarify
 from scaffold import Scaffold, Scaffolds
 
 parser = ArgumentParser()
-parser.add_argument("efile", help="Error rate file")
+parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format", nargs="+")
 #parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--mincontigs", type=int, default=2,help="Minimum number of contigs on long read for the read to be considered")
 parser.add_argument("--summaryfile", help="Contig Distance Summary file")
@@ -139,7 +139,7 @@ def shortname(ctgname):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
-lrs = Scaffolds(args.efile, blacklist, args.linename)
+lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
 lrs.filter_small_contigs(300)
 lrs.turn_longreads_around()

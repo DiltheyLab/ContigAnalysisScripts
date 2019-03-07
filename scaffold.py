@@ -25,44 +25,45 @@ class Scaffolds:
         
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
-    def __init__(self, inputfilename, blacklist, line, whitelist = None):
+    def __init__(self, inputfiles, blacklist, line, whitelist = None):
         self.line = line
-        with open(inputfilename) as f:
-            pafformat = True if sniff_format(f) == "paf" else False
-            for line in f:
-                if pafformat:
-                    [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
-                    strand = 0 if strandstring == "+" else 1
-                else:
-                    [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-                    if "strand" == "1": # workaround for misleading coordinates in erates file
-                        tmp = int(lenc) - int(ecc)
-                        ecc = int(lenc) - int(scc)
-                        scc = tmp
-                data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-                if whitelist:
-                    if rid not in whitelist:
-                        continue
-                if blacklist:
-                    if rid in blacklist:
-                        if "all" in blacklist[rid]:
+        for inputfilename in inputfiles:
+            with open(inputfilename) as f:
+                pafformat = True if sniff_format(f) == "paf" else False
+                for line in f:
+                    if pafformat:
+                        [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
+                        strand = 0 if strandstring == "+" else 1
+                    else:
+                        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+                        if "strand" == "1": # workaround for misleading coordinates in erates file
+                            tmp = int(lenc) - int(ecc)
+                            ecc = int(lenc) - int(scc)
+                            scc = tmp
+                    data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                    if whitelist:
+                        if rid not in whitelist:
                             continue
-                        elif ctg in blacklist[rid]:
+                    if blacklist:
+                        if rid in blacklist:
+                            if "all" in blacklist[rid]:
+                                continue
+                            elif ctg in blacklist[rid]:
+                                continue
+                        if shortname(ctg) in blacklist:
                             continue
-                    if shortname(ctg) in blacklist:
-                        continue
-                if rid in self.lreads:
-                    self.lreads[rid]["maps"].append(data)
-                    if int(ecr) > self.lreads[rid]["rm_ecr"]:
+                    if rid in self.lreads:
+                        self.lreads[rid]["maps"].append(data)
+                        if int(ecr) > self.lreads[rid]["rm_ecr"]:
+                            self.lreads[rid]["rm_ecr"] = int(ecr)
+                        if int(scr) < self.lreads[rid]["lm_scr"]:
+                            self.lreads[rid]["lm_scr"] = int(scr)
+                    else:
+                        self.lreads[rid] = {}
+                        self.lreads[rid]["length"] = int(lenr)
+                        self.lreads[rid]["maps"] = [data]
                         self.lreads[rid]["rm_ecr"] = int(ecr)
-                    if int(scr) < self.lreads[rid]["lm_scr"]:
                         self.lreads[rid]["lm_scr"] = int(scr)
-                else:
-                    self.lreads[rid] = {}
-                    self.lreads[rid]["length"] = int(lenr)
-                    self.lreads[rid]["maps"] = [data]
-                    self.lreads[rid]["rm_ecr"] = int(ecr)
-                    self.lreads[rid]["lm_scr"] = int(scr)
 
     
     def filter_contigcounts(self, nr):

@@ -9,7 +9,7 @@ from scaffold import Scaffolds
 
 
 parser = ArgumentParser()
-parser.add_argument("efile", help="Error rate file")
+parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format", nargs="+")
 parser.add_argument("summaryfile", help="Contig distance summary file")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
@@ -38,7 +38,7 @@ if args.blacklistfile:
             else:
                 blacklist[sline[0]] = sline[1]
 
-lrs = Scaffolds(args.efile, False, blacklist, args.linename)
+lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(2)
 lrs.turn_longreads_around()
 lrs.sort_contigs_in_reads()

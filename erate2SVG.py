@@ -11,9 +11,9 @@ from scaffold import Scaffold, Scaffolds
 
 
 parser = ArgumentParser()
-parser.add_argument("inputfile", help="Error-rate or paf-file")
+parser.add_argument("inputfiles", help="Error-rate or paf-file", nargs="+")
 parser.add_argument("contigfile", help="Fasta File containing contigs")
-parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
+#parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--whitelist", help="Only plot long reads with ids found in this whitelist file.")
 parser.add_argument("--blacklist", help="Do not plot long reads in this file.")
 parser.add_argument("--alignreads", action="store_true", help="Reads will be turned around if necessary and aligned according to their distances.")
@@ -41,7 +41,7 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
 
-scafs = Scaffolds(args.inputfile, args.paf, blacklist, args.linename)
+scafs = Scaffolds(args.inputfiles, blacklist, args.linename)
 scafs.filter_contigcounts(args.mincontigs)
 scafs.turn_longreads_around()
 lreads = scafs.lreads
@@ -148,6 +148,7 @@ lr_dists = {}
 for lid, read in ogreads.items():
     lr_dists[lid] = {lid:0}
 
+sorted_reads = {}
 if args.alignreads:
     for lrs in combinations(ogreads.keys(), 2):
         lr1 = ogreads[lrs[0]]
@@ -157,14 +158,14 @@ if args.alignreads:
             dists = get_distances(lr1, lr2, common_ctgs)
             lr_dists[lrs[0]][lrs[1]]=dists[0]
             lr_dists[lrs[1]][lrs[0]]=-dists[0]
+    #print(lr_dists)
 
-                
-sorted_reads = {}
-if args.alignreads:
     for cluster in creads:
+        print(cluster)
         #print("ccontigs: " + str(ccontigs[cluster]))
         #print(creads[cluster].keys())
         # find leftmost read 
+        print("cluster length: " + str(len(creads[cluster])))
         while True:
             rid = sample(creads[cluster].keys(),1)[0]
             for rid2 in creads[cluster].keys():
@@ -178,17 +179,12 @@ if args.alignreads:
         # fill lr_dists with transitive distances
         A = set(creads[cluster].keys())
         B = set(lr_dists[srid].keys())
-        #print("A: "+ str(A))
-        #print("B: "+ str(B))
         U = A-B
-        #print("U: "+ str(U))
         UC = U.copy()
         while True:
-        #for i in range(100):
-            #print(U)
             for rid in U:
                 for rid2 in lr_dists[rid]:
-                    if rid2 not in UC:
+                    if rid2 in B:
                         lr_dists[srid][rid] = lr_dists[srid][rid2] + lr_dists[rid2][rid]
                         lr_dists[rid][srid] = lr_dists[srid][rid]
                         UC.remove(rid)
