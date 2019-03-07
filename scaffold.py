@@ -337,6 +337,35 @@ class Scaffold:
         ctg_relative_positions = cycle([-ctg_y_halfdrawsize-1, ctg_y_halfdrawsize+3, -ctg_y_halfdrawsize-4, ctg_y_halfdrawsize+6])
 
         gradient_idc = 0
+
+        def get_colors_from_nr(nr):
+            col1 = "#000000"
+            col2 = "#000000"
+            if nr==0 or nr==1:
+                col1 = "#FF0000"
+                col2 = "#0000FF"
+            elif nr==2 or nr==3:
+                col1 = "#FFE119"
+                col2 = "#000000"
+            elif nr==4 or nr==5:
+                col1 = "#911eb4"
+                col2 = "#a9a9a9"
+            elif nr==6 or nr==7:
+                col1 = "#000075"
+                col2 = "#f58231"
+            elif nr==8 or nr==9:
+                col1 = "#e6beff"
+                col2 = "#808000"
+            return [col1, col2]
+
+        def get_colors(ctgn):
+            col1, col2 = get_colors_from_nr(int(ctgn[-1]))
+            total = 0
+            for char in ctgn:
+                total += int(char)
+            col3, col4 = get_colors_from_nr(total % 10)
+            return [col1, col2, col3, col4]
+
         for ctg in sorted(self.contigset, key= lambda x: self.left_coords[x]):
             #print(read)
             sc = self.left_coords[ctg]
@@ -352,31 +381,32 @@ class Scaffold:
                 ctgn = "$" + ctgn + "q"
 
             gradient_idc += 1
-            gradient_id = self.name + "_" + str(gradient_idc)
-            lineargrad = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
-            if ctgn2.endswith("0") or ctgn2.endswith("1"):
-                col1 = "#FF0000"
-                col2 = "#0000FF"
-            elif ctgn2.endswith("2") or ctgn2.endswith("3"):
-                col1 = "#FFE119"
-                col2 = "#000000"
-            elif ctgn2.endswith("4") or ctgn2.endswith("5"):
-                col1 = "#911eb4"
-                col2 = "#a9a9a9"
-            elif ctgn2.endswith("6") or ctgn2.endswith("7"):
-                col1 = "#000075"
-                col2 = "#f58231"
-            elif ctgn2.endswith("8") or ctgn2.endswith("9"):
-                col1 = "#e6beff"
-                col2 = "#808000"
+            gradient_id1 = self.name + "_" + str(gradient_idc)
+            gradient_idc += 1
+            gradient_id2 = self.name + "_" + str(gradient_idc)
+            lineargrad1 = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id1 , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            lineargrad2 = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id2 , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            col1, col2, col3, col4 = get_colors(shortname(ctgn2))
                 
-            lineargrad.add_stop_color("0%",col1)
-            lineargrad.add_stop_color("50%","#FFFFFF")
-            lineargrad.add_stop_color("100%",col2)
+            lineargrad1.add_stop_color("0%",col1)
+            lineargrad1.add_stop_color("50%","#FFFFFF")
+            lineargrad1.add_stop_color("100%",col2)
+            lineargrad2.add_stop_color("0%",col3)
+            lineargrad2.add_stop_color("50%","#FFFFFF")
+            lineargrad2.add_stop_color("100%",col4)
 
             #leftclip = scc/100
             #rightclip = (contigs[shortname(ctg)]-ecc)/100
-            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id + ')'))
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')', clip_path='url(#mask1)' ))
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
+            x = xoff + sc/100
+            y = yoff + ypos-ctg_y_halfdrawsize
+            w = (ec-sc)/100
+            h = 2*ctg_y_halfdrawsize
+            #img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(w),"0","L","0",str(h),"L",str(-w),str(-h)]), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')' ))
+            img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x+w),str(y),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id1 + ')' ))
+            img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x),str(y+h),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id2 + ')' ))
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
             #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             yt = yoff + ypos + next(ctg_relative_positions)
             img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
@@ -615,7 +645,8 @@ class Scaffold:
                 #print("\t".join([ctg1, str(scaf2.left_coords[ctg1]),str(scaf2.left_coords_contig[ctg1]), ctg2, str(scaf2.left_coords[ctg2]), str(scaf2.left_coords_contig[ctg2])]))
             print(self.name + "  " + scaf2.name)
             #print(str(self.lr_info.keys()) + "  " + str(scaf2.lr_info.keys()))
-            sys.exit()
+            #sys.exit()
+            return False
 
         sorted_same_ctgs1 = sorted(same_ctgs, key = lambda item: self.left_coords[item])
         sorted_same_ctgs2 = sorted(same_ctgs, key = lambda item: scaf2.left_coords[item])

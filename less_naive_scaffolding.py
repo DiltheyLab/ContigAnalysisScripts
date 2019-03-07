@@ -183,6 +183,13 @@ lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
 lineargrad.add_stop_color(0,"#FF0000")
 lineargrad.add_stop_color(50,"#FFFFFF")
 lineargrad.add_stop_color(100,"#0000FF")
+mask1 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask1"))
+#mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1"))
+mask2 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask2"))
+mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0"))
+   
 #svgwrite.gradients.LinearGradient((0,0), (100,0))
 yp = 10
 xtext = 10
