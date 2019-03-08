@@ -143,6 +143,15 @@ lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
 lrs.filter_small_contigs(300)
 lrs.turn_longreads_around()
+lrs.sort_by_starts()
+
+print("Pseudoalignment started")
+pctgs = lrs.get_problem_contigs()
+print(pctgs)
+print(len(lrs.get_problem_contigs()))
+pctg = pctgs.pop()
+lrs.cluster_by_contig(pctg)
+sys.exit()
 scaffolds = lrs.construct_scaffolds(allcontigs)
 
 #scaffolds = {}
