@@ -1,4 +1,4 @@
-from itertools import combinations, cycle
+from itertools import combinations, cycle, product
 from collections import defaultdict
 import svgwrite
 import sys
@@ -21,12 +21,12 @@ def sniff_format(fileh):
 
 class Scaffolds:
     lreads = {}
-    line = ""
+    cellline = ""
         
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
     def __init__(self, inputfiles, blacklist, line, whitelist = None):
-        self.line = line
+        self.cellline = line
         for inputfilename in inputfiles:
             with open(inputfilename) as f:
                 pafformat = True if sniff_format(f) == "paf" else False
@@ -53,6 +53,7 @@ class Scaffolds:
                         if shortname(ctg) in blacklist:
                             continue
                     if rid in self.lreads:
+                        self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["maps"].append(data)
                         if int(ecr) > self.lreads[rid]["rm_ecr"]:
                             self.lreads[rid]["rm_ecr"] = int(ecr)
@@ -61,7 +62,10 @@ class Scaffolds:
                     else:
                         self.lreads[rid] = {}
                         self.lreads[rid]["length"] = int(lenr)
+                        # maps is just a list. mapsc allows for easy access to all contigs with a certain name
                         self.lreads[rid]["maps"] = [data]
+                        self.lreads[rid]["mapsc"] = defaultdict(list)
+                        self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["rm_ecr"] = int(ecr)
                         self.lreads[rid]["lm_scr"] = int(scr)
 
@@ -71,7 +75,7 @@ class Scaffolds:
         for rid,read in self.lreads.items():
             counter = 0
             for item in read["maps"]:
-                if self.line in item["name"]:
+                if self.cellline in item["name"]:
                     counter +=1
             
             if counter < nr:
@@ -88,10 +92,109 @@ class Scaffolds:
             for item in toremove:
                 self.lreads[rid]["maps"].remove(item)
     
+    def sort_by_starts(self):
+        for read in self.lreads.values():
+            read["maps"] = sorted(read["maps"], key = lambda x: x["scr"])
+
+    def get_problem_contigs(self):
+        problem_contigs = set()
+        for read in self.lreads.values():
+            seen_contigs = set()
+            for contig in read["maps"]:
+                if contig["name"] in seen_contigs:
+                    problem_contigs.add(contig["name"])
+                if self.cellline in contig["name"]:
+                    seen_contigs.add(contig["name"])
+        return problem_contigs
+
+    # only use this when the maps have been sorted
+    def get_maps_right(self, rid, start, end, cellline_only = True):
+        maps = []
+        for contig in self.lreads[rid]["maps"]:
+            if contig["scr"] < start:
+                continue
+            elif contig["scr"] >= start and contig["scr"] <= end:
+                if cellline_only and self.cellline not in contig["name"]:
+                    continue
+                else:
+                    maps.append(contig)
+            else: # contig["scr"] > end:
+                return maps
+        return maps # if less than 'end' bases to the right of the contig
+
+
+    # pseudoalign all
+    def pseudoalign(self,rid1, rid2, contign, bases):
+        #info1 = self.get_maps_right(rid1, end1, end1+bases)
+        #info2 = self.get_maps_right(rid2, end2, end2+bases)
+        #print(info1)
+        #print(info2)
+        ctgpos1 = set()
+        for ctg in self.lreads[rid1]["maps"]:
+            if ctg["name"] == contign:
+                ctgpos1.add(ctg["scr"] - ctg["scc"])
+        ctgpos2 = set()
+        ctgset2 = set()
+        for ctg in self.lreads[rid2]["maps"]:
+            if ctg["name"] == contign:
+                ctgpos2.add(ctg["scr"] - ctg["scc"])
+                ctgset2.add(ctg["name"])
+        print(rid1)
+        print(rid2)
+        print(contign)
+        print(ctgpos1)
+        print(ctgpos2)
+        scores = []
+        
+        for d1, d2 in product(ctgpos1, ctgpos2):
+            score = 0
+            off = d2-d1
+            for ctg1 in self.lreads[rid1]["maps"]:
+                for ctg2 in self.lreads[rid2]["mapsc"][ctg1]:
+                    vstart1 = ctg1["scr"] - ctg1["scc"] 
+                    vstart2 = ctg2["scr"] - ctg2["scc"] 
+                    distance = vstart1 - 
+                
+                #if ctg["name"] in ctgset2:
+                #    for 
+                pass
+                    
+                
+        sys.exit()
+        return True
+        #self.lreads["rid1"]
+
+    def cluster_by_contig(self,ctg):
+        reads_to_cluster = set()
+        for rid,read in self.lreads.items():
+            for contig in read["maps"]:
+                if contig["name"] == ctg:
+                    reads_to_cluster.add(rid)
+        print("reads to cluster: "  + str(reads_to_cluster))
+        clusters = []
+        while len(reads_to_cluster) != 0:
+            crid = reads_to_cluster.pop()
+            cluster_found = False
+            # try to align read to any of the clusters
+            for cluster in clusters:
+                arid = cluster[0]
+                val = self.pseudoalign(crid, arid, ctg, 100000)
+                if val != False:
+                    cluster.append(crid)
+                    cluster_found = True
+            if not cluster_found:
+                clusters.append([crid])
+        print(clusters)
+            
+
+        
+                
+
+    
     def construct_scaffolds(self, contigs):
         scaffolds = {}
         for rid in self.lreads:
-            nscaff = Scaffold.init_from_LR((rid,self.lreads[rid]),self.line, contigs )
+            nscaff = Scaffold.init_from_LR((rid,self.lreads[rid]),self.cellline, contigs )
             scaffolds[id(nscaff)] = nscaff
         return scaffolds
 
