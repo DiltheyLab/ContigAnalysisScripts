@@ -1,5 +1,5 @@
 from itertools import combinations, cycle, product
-from collections import defaultdict
+from collections import defaultdict, Counter
 import svgwrite
 import sys
 
@@ -22,6 +22,14 @@ def sniff_format(fileh):
 class Scaffolds:
     lreads = {}
     cellline = ""
+
+    def __str__(self):
+        out = ""
+        for lread in self.lreads.values():
+            out += "Length: " + str(lread["length"]) + "\n"
+            for mapper in lread["maps"]:
+                out += "\t" + str(mapper) + "\n"
+        return out
         
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
@@ -30,13 +38,14 @@ class Scaffolds:
         for inputfilename in inputfiles:
             with open(inputfilename) as f:
                 pafformat = True if sniff_format(f) == "paf" else False
+            with open(inputfilename) as f:
                 for line in f:
                     if pafformat:
                         [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
                         strand = 0 if strandstring == "+" else 1
                     else:
                         [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-                        if "strand" == "1": # workaround for misleading coordinates in erates file
+                        if strand == "1": # workaround for misleading coordinates in erates file
                             tmp = int(lenc) - int(ecc)
                             ecc = int(lenc) - int(scc)
                             scc = tmp
@@ -97,12 +106,12 @@ class Scaffolds:
             read["maps"] = sorted(read["maps"], key = lambda x: x["scr"])
 
     def get_problem_contigs(self):
-        problem_contigs = set()
+        problem_contigs = Counter()
         for read in self.lreads.values():
             seen_contigs = set()
             for contig in read["maps"]:
                 if contig["name"] in seen_contigs:
-                    problem_contigs.add(contig["name"])
+                    problem_contigs[contig["name"]] += 1
                 if self.cellline in contig["name"]:
                     seen_contigs.add(contig["name"])
         return problem_contigs
@@ -122,6 +131,27 @@ class Scaffolds:
                 return maps
         return maps # if less than 'end' bases to the right of the contig
 
+    def get_overlapping_bases(self, ctg1, ctgs2, offset):
+        overlapping = 0
+        start = ctg1["scr"] + offset
+        end = ctg1["ecr"] + offset
+        #print("start: " + str(start))
+        #print("end: " + str(end))
+        for ctg2 in ctgs2:
+            if ctg2["scr"] > end:
+                return overlapping
+            elif ctg2["ecr"] < start:
+                continue
+            else:
+                if start < ctg2["ecr"]:
+                    overlap = ctg2["ecr"] - start
+                    overlapping += overlap
+                    #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
+                if end > ctg2["scr"]:
+                    overlap = end - ctg2["scr"]
+                    overlapping += overlap
+                    #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
+        return overlapping
 
     # pseudoalign all
     def pseudoalign(self,rid1, rid2, contign, bases):
@@ -139,29 +169,55 @@ class Scaffolds:
             if ctg["name"] == contign:
                 ctgpos2.add(ctg["scr"] - ctg["scc"])
                 ctgset2.add(ctg["name"])
+        if len(ctgpos1) == 1 and len(ctgpos2) == 1:
+            return True
         print(rid1)
         print(rid2)
         print(contign)
         print(ctgpos1)
         print(ctgpos2)
         scores = []
-        
+    
         for d1, d2 in product(ctgpos1, ctgpos2):
-            score = 0
+            print("-"*30)
+            print("\t".join([str(d1), str(d2)]))
+            overall_score = 0
             off = d2-d1
+
             for ctg1 in self.lreads[rid1]["maps"]:
-                for ctg2 in self.lreads[rid2]["mapsc"][ctg1]:
+                best_pair_score = 0
+                for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
                     vstart1 = ctg1["scr"] - ctg1["scc"] 
                     vstart2 = ctg2["scr"] - ctg2["scc"] 
-                    distance = vstart1 - 
-                
-                #if ctg["name"] in ctgset2:
-                #    for 
-                pass
+                    distance = vstart2 - vstart1 - off
+                    scoret = -abs(distance)
+                    scoret += 2*min(ctg1["ecc"]-ctg1["scc"], ctg2["ecc"] - ctg2["scc"])
+                    print("\t".join([ctg1["name"], ctg2["name"], "scoret", str(scoret),"distance",str(distance)]))
+                    if scoret > best_pair_score:
+                        best_pair_score = scoret 
+                        #print("!" + ctg1["name"] + " / " + str(scoret))
+                    else:
+                        pass
+                        #print(ctg1["name"] + " / " + str(scoret))
+                if best_pair_score > 0:
+                    overall_score += best_pair_score
+                    continue
+                else: # check if problem for that contig
+                    if ctg1["ecr"] + off < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + off > self.lreads[rid2]["maps"][-1]["ecr"]:
+                        print("ctgs + off: " + str(ctg1["scr"]+ off))
+                        print("ctge + off: " + str(ctg1["ecr"]+ off))
+                        #print("ctg1[ecc]: " + ctg1["ecc"])
+                        continue
+                    else:
+                        overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], off)
+                    
+                print("ov. score: " + str(overall_score))
+            scores.append(overall_score)
                     
                 
+        print(scores)
         sys.exit()
-        return True
+        return True 
         #self.lreads["rid1"]
 
     def cluster_by_contig(self,ctg):
@@ -187,10 +243,6 @@ class Scaffolds:
         print(clusters)
             
 
-        
-                
-
-    
     def construct_scaffolds(self, contigs):
         scaffolds = {}
         for rid in self.lreads:
