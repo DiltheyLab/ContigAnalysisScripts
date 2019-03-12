@@ -22,6 +22,7 @@ def sniff_format(fileh):
 class Scaffolds:
     lreads = {}
     cellline = ""
+    ctg2lreads = defaultdict(set)
 
     def __str__(self):
         out = ""
@@ -61,6 +62,7 @@ class Scaffolds:
                                 continue
                         if shortname(ctg) in blacklist:
                             continue
+                    self.ctg2lreads[ctg].add(rid)
                     if rid in self.lreads:
                         self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["maps"].append(data)
@@ -90,7 +92,17 @@ class Scaffolds:
             if counter < nr:
                 toremove.add(rid)
         for rid in toremove:
+            for item in self.lreads[rid]["maps"]:
+                if rid in self.ctg2lreads[item["name"]]:
+                    self.ctg2lreads[item["name"]].remove(rid)
             del(self.lreads[rid])
+
+    def remove_contig_from_read(self, rid, ctg):
+        self.lreads[rid]["maps"].remove(ctg)
+        ctgn = ctg["name"]
+        self.lreads[rid]["mapsc"][ctgn].remove(ctg)
+        if not self.lreads[rid]["mapsc"][ctgn]: # if there is no contig with this name left in the read
+            self.ctg2lreads[ctgn].remove(rid)
 
     def filter_small_contigs(self, size):
         for rid,read in self.lreads.items():
@@ -99,7 +111,17 @@ class Scaffolds:
                 if item["ecc"] - item["scc"] < size:
                     toremove.append(item)
             for item in toremove:
-                self.lreads[rid]["maps"].remove(item)
+                self.remove_contig_from_read(rid, item)
+
+    def filter_reverse_small_contigs(self, size):
+        for rid,read in self.lreads.items():
+            toremove = []
+            for item in read["maps"]:
+                if item["ecc"] - item["scc"] < size and item["strand"] == 1:
+                    toremove.append(item)
+            for item in toremove:
+                self.remove_contig_from_read(rid, item)
+
     
     def sort_by_starts(self):
         for read in self.lreads.values():
@@ -164,41 +186,9 @@ class Scaffolds:
                     #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
         return overlapping
 
-
-    # pseudoalign all
-    def pseudoalign_combinations(self,rid1, rid2, contign, bases):
-        #info1 = self.get_maps_right(rid1, end1, end1+bases)
-        #info2 = self.get_maps_right(rid2, end2, end2+bases)
-        #print(info1)
-        #print(info2)
-        ctgpos1 = set()
-        for ctg in self.lreads[rid1]["maps"]:
-            if ctg["name"] == contign:
-                ctgpos1.add(ctg["scr"] - ctg["scc"])
-        ctgpos2 = set()
-        ctgset2 = set()
-        for ctg in self.lreads[rid2]["maps"]:
-            if ctg["name"] == contign:
-                ctgpos2.add(ctg["scr"] - ctg["scc"])
-                ctgset2.add(ctg["name"])
-        print(rid1)
-        print(rid2)
-        #print(contign)
-        #print(ctgpos1)
-        #print(ctgpos2)
-        scores = []
-    
-        for d1, d2 in product(ctgpos1, ctgpos2):
-            print("-"*30)
-            print("\t".join([str(d1), str(d2)]))
-            off = d2-d1
-            overall_score = pseudoalign(rid1, rid2, off)
-            scores.append(overall_score)
-        return scores
-        #self.lreads["rid1"]
-
     # pseudoalign matchin contigs if possible, punish overlapping mismatching contigs
     def pseudoalign(self,rid1, rid2, offset):
+        overall_score = 0
         for ctg1 in self.lreads[rid1]["maps"]:
             best_pair_score = 0
             for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
@@ -220,27 +210,46 @@ class Scaffolds:
                     overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
         return overall_score
 
-    def cluster_by_contig(self,ctg, lrid):
-        reads_to_cluster = set()
-        for rid,read in self.lreads.items():
-            for contig in read["maps"]:
-                if contig["name"] == ctg:
-                    reads_to_cluster.add(rid)
-        print("reads to cluster: "  + str(reads_to_cluster))
-        clusters = []
-        while len(reads_to_cluster) != 0:
-            crid = reads_to_cluster.pop()
-            cluster_found = False
-            # try to align read to any of the clusters
-            for cluster in clusters:
-                arid = cluster[0]
-                val = self.pseudoalign_combinations(crid, arid, ctg, 100000)
-                if val != False:
-                    cluster.append(crid)
-                    cluster_found = True
-            if not cluster_found:
-                clusters.append([crid])
-        print(clusters)
+
+    def remove_problem_contigs(self,ctgn, prids):
+        #print(self.ctg2lreads[ctg])
+        print("contig " + ctgn)
+        print("prids " + str(prids))
+
+        #prids has all reads which have the contig doubly
+        #let's see if evidence can be found, that both make sense
+        singles = self.ctg2lreads[ctgn] - set(prids)
+        print("singles: " + str(singles))
+        for prid in prids:
+            ctgpos1 = []
+            ctgs1 = []
+            for ctg in self.lreads[prid]["mapsc"][ctgn]:
+                ctgpos1.append(ctg["scr"] - ctg["scc"])
+                ctgs1.append(ctg)
+            vals = {}
+            for d1 in ctgpos1:
+                vals[d1] = []
+                for rid in singles:
+                    ctg2 = self.lreads[rid]["mapsc"][ctgn][0]
+                    d2 = ctg2["scr"] - ctg2["scc"]
+                    offset = d2 - d1
+                    val = self.pseudoalign(prid, rid, offset)
+                    vals[d1].append(val)
+            for idx, d1 in enumerate(ctgpos1):
+                if max(vals[d1]) < 0:
+                    print("removing contig " + ctgs1[idx]["name"] + " from " + prid)
+                    self.remove_contig_from_read(prid, ctgs1[idx])
+                else:
+                    print(vals)
+                    
+            sys.exit()
+
+            #print(vals)
+
+
+            
+
+
             
 
     def construct_scaffolds(self, contigs):

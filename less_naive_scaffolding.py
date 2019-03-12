@@ -134,14 +134,13 @@ def shortname(ctgname):
 #add_neighs("49APD","116APD","right",round(-4.8))
 #srneighs["504APD"]["right"] = []
 
-   
-
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
 lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(args.mincontigs)
 lrs.filter_small_contigs(300)
+lrs.filter_reverse_small_contigs(600)
 lrs.turn_longreads_around()
 lrs.sort_by_starts()
 
@@ -150,16 +149,24 @@ ph = lrs.identify_hairpins()
 if len(ph) > 0:
     print("Potential Hairpins")
     for lr, nr in ph.items():
-        print(lr + ": " + str(nr))
+        if nr > 2:
+            print(lr + ": " + str(nr))
 print("Pseudoalignment started")
 pctgs = lrs.get_problem_contigs()
-print(pctgs)
+#print(pctgs)
 for pair, nr in pctgs.items():
     print(str(pair) + ": " + str(nr))
-print(len(lrs.get_problem_contigs()))
-pctg = "2443APD"
+#print(len(pctgs))
+#print(pctgs["2443APD"])
+#pctg = "2443APD"
 
-lrs.cluster_by_contig(pctg, pctgs[pctg])
+while pctgs:
+    pctg = list(pctgs.keys()).pop()
+    print("solving problems for " + pctg)
+    lrs.remove_problem_contigs(pctg, pctgs[pctg])
+    pctgs = lrs.get_problem_contigs()
+
+#f67f9b65-2333-4ccd-beb4-08bc086545eb
 sys.exit()
 scaffolds = lrs.construct_scaffolds(allcontigs)
 
