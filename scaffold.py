@@ -105,13 +105,24 @@ class Scaffolds:
         for read in self.lreads.values():
             read["maps"] = sorted(read["maps"], key = lambda x: x["scr"])
 
+    def identify_hairpins(self):
+        potential_hairpins = Counter()
+        for rid, read in self.lreads.items():
+            seen_contigs = {}
+            for contig in read["maps"]:
+                if contig["name"] in seen_contigs and seen_contigs[contig["name"]] != contig["strand"]:
+                    potential_hairpins[rid] += 1
+                if self.cellline in contig["name"]:
+                    seen_contigs[contig["name"]] = contig["strand"]
+        return potential_hairpins
+
     def get_problem_contigs(self):
-        problem_contigs = Counter()
-        for read in self.lreads.values():
+        problem_contigs = defaultdict(set)
+        for rid, read in self.lreads.items():
             seen_contigs = set()
             for contig in read["maps"]:
                 if contig["name"] in seen_contigs:
-                    problem_contigs[contig["name"]] += 1
+                    problem_contigs[contig["name"]].add(rid)
                 if self.cellline in contig["name"]:
                     seen_contigs.add(contig["name"])
         return problem_contigs
@@ -153,8 +164,9 @@ class Scaffolds:
                     #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
         return overlapping
 
+
     # pseudoalign all
-    def pseudoalign(self,rid1, rid2, contign, bases):
+    def pseudoalign_combinations(self,rid1, rid2, contign, bases):
         #info1 = self.get_maps_right(rid1, end1, end1+bases)
         #info2 = self.get_maps_right(rid2, end2, end2+bases)
         #print(info1)
@@ -169,58 +181,46 @@ class Scaffolds:
             if ctg["name"] == contign:
                 ctgpos2.add(ctg["scr"] - ctg["scc"])
                 ctgset2.add(ctg["name"])
-        if len(ctgpos1) == 1 and len(ctgpos2) == 1:
-            return True
         print(rid1)
         print(rid2)
-        print(contign)
-        print(ctgpos1)
-        print(ctgpos2)
+        #print(contign)
+        #print(ctgpos1)
+        #print(ctgpos2)
         scores = []
     
         for d1, d2 in product(ctgpos1, ctgpos2):
             print("-"*30)
             print("\t".join([str(d1), str(d2)]))
-            overall_score = 0
             off = d2-d1
-
-            for ctg1 in self.lreads[rid1]["maps"]:
-                best_pair_score = 0
-                for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
-                    vstart1 = ctg1["scr"] - ctg1["scc"] 
-                    vstart2 = ctg2["scr"] - ctg2["scc"] 
-                    distance = vstart2 - vstart1 - off
-                    scoret = -abs(distance)
-                    scoret += 2*min(ctg1["ecc"]-ctg1["scc"], ctg2["ecc"] - ctg2["scc"])
-                    print("\t".join([ctg1["name"], ctg2["name"], "scoret", str(scoret),"distance",str(distance)]))
-                    if scoret > best_pair_score:
-                        best_pair_score = scoret 
-                        #print("!" + ctg1["name"] + " / " + str(scoret))
-                    else:
-                        pass
-                        #print(ctg1["name"] + " / " + str(scoret))
-                if best_pair_score > 0:
-                    overall_score += best_pair_score
-                    continue
-                else: # check if problem for that contig
-                    if ctg1["ecr"] + off < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + off > self.lreads[rid2]["maps"][-1]["ecr"]:
-                        print("ctgs + off: " + str(ctg1["scr"]+ off))
-                        print("ctge + off: " + str(ctg1["ecr"]+ off))
-                        #print("ctg1[ecc]: " + ctg1["ecc"])
-                        continue
-                    else:
-                        overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], off)
-                    
-                print("ov. score: " + str(overall_score))
+            overall_score = pseudoalign(rid1, rid2, off)
             scores.append(overall_score)
-                    
-                
-        print(scores)
-        sys.exit()
-        return True 
+        return scores
         #self.lreads["rid1"]
 
-    def cluster_by_contig(self,ctg):
+    # pseudoalign matchin contigs if possible, punish overlapping mismatching contigs
+    def pseudoalign(self,rid1, rid2, offset):
+        for ctg1 in self.lreads[rid1]["maps"]:
+            best_pair_score = 0
+            for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
+                vstart1 = ctg1["scr"] - ctg1["scc"] 
+                vstart2 = ctg2["scr"] - ctg2["scc"] 
+                distance = vstart2 - vstart1 - offset
+                scoret = -abs(distance)
+                scoret += 2*min(ctg1["ecc"]-ctg1["scc"], ctg2["ecc"] - ctg2["scc"])
+                #print("\t".join([ctg1["name"], ctg2["name"], "scoret", str(scoret),"distance",str(distance)]))
+                if scoret > best_pair_score:
+                    best_pair_score = scoret 
+            if best_pair_score > 0:
+                overall_score += best_pair_score
+                continue
+            else: # check if problem for that contig
+                if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
+                   continue
+                else:
+                    overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+        return overall_score
+
+    def cluster_by_contig(self,ctg, lrid):
         reads_to_cluster = set()
         for rid,read in self.lreads.items():
             for contig in read["maps"]:
@@ -234,7 +234,7 @@ class Scaffolds:
             # try to align read to any of the clusters
             for cluster in clusters:
                 arid = cluster[0]
-                val = self.pseudoalign(crid, arid, ctg, 100000)
+                val = self.pseudoalign_combinations(crid, arid, ctg, 100000)
                 if val != False:
                     cluster.append(crid)
                     cluster_found = True

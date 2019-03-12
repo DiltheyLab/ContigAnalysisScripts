@@ -146,11 +146,20 @@ lrs.turn_longreads_around()
 lrs.sort_by_starts()
 
 print("Pseudoalignment started")
+ph = lrs.identify_hairpins()
+if len(ph) > 0:
+    print("Potential Hairpins")
+    for lr, nr in ph.items():
+        print(lr + ": " + str(nr))
+print("Pseudoalignment started")
 pctgs = lrs.get_problem_contigs()
 print(pctgs)
+for pair, nr in pctgs.items():
+    print(str(pair) + ": " + str(nr))
 print(len(lrs.get_problem_contigs()))
-pctg = pctgs.pop()
-lrs.cluster_by_contig(pctg)
+pctg = "2443APD"
+
+lrs.cluster_by_contig(pctg, pctgs[pctg])
 sys.exit()
 scaffolds = lrs.construct_scaffolds(allcontigs)
 
@@ -410,6 +419,8 @@ if args.contigsmergefile:
                     sortedcontigs.remove(ctg)
             for ctg1, ctg2 in zip(sortedcontigs[:-1], sortedcontigs[1:]):
                 cmergef.write(ctg1+ "\t" + ctg2 + "\n")
+
+print("Drawing Scaffolds ...")
             
 # Draw all scaffolds
 lrsr_lengths = []
