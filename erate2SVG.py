@@ -15,6 +15,7 @@ parser.add_argument("inputfiles", help="Error-rate or paf-file", nargs="+")
 parser.add_argument("contigfile", help="Fasta File containing contigs")
 #parser.add_argument("--paf", help="Input is paf file", action="store_true", default = False)
 parser.add_argument("--whitelist", help="Only plot long reads with ids found in this whitelist file.")
+parser.add_argument("--whitelist_lrs", help="Only plot long reads with these ids.")
 parser.add_argument("--blacklist", help="Do not plot long reads in this file.")
 parser.add_argument("--alignreads", action="store_true", help="Reads will be turned around if necessary and aligned according to their distances.")
 parser.add_argument("--mincontigs", default=2, help="Minimum number of contigs that have to map into the long read, for the long read to be considered.")
@@ -68,12 +69,19 @@ if(args.whitelist):
     with open(args.whitelist) as f:
         for line in f:
             whitelist.add(line.strip())
-            
     creads[0] = {}
     for rid,read in lreads.items():
         for mapping in read["maps"]:
             if mapping["name"] in whitelist:
                 creads[0][rid] = read
+elif(args.whitelist_lrs):
+    with open(args.whitelist_lrs) as f:
+        for line in f:
+            whitelist.add(line.strip())
+    creads[0] = {}
+    for rid,read in lreads.items():
+        if rid in whitelist:
+            creads[0][rid] = read
 else:
     while len(lreads) > 0:
         clusternr += 1
@@ -221,6 +229,13 @@ lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
 lineargrad.add_stop_color("0%","#FF0000")
 lineargrad.add_stop_color("50%","#FFFFFF")
 lineargrad.add_stop_color("100%","#0000FF")
+#mask1 = dwg.defs.add(svgwrite.masking.Mask(maskContentUnits = 'objectBoundingBox', id="mask1"))
+#mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+#mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1", fill="white"))
+#mask2 = dwg.defs.add(svgwrite.masking.Mask(maskContentUnits = 'objectBoundingBox', id="mask2"))
+#mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+#mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0", fill="white"))
+
 
 
 def shortname(ctgname):
@@ -285,12 +300,17 @@ for cluster in clustered_reads:
                 col1 = "#e6beff"
                 col2 = "#808000"
                 
+            if read["strand"] == 1:
+                tcol = col1
+                col1 = col2
+                col2 = tcol
             lineargrad.add_stop_color("0%",col1)
             lineargrad.add_stop_color("50%","#FFFFFF")
             lineargrad.add_stop_color("100%",col2)
             #g.add(svgwrite.shapes.Rect((xpad+(sc/100)-leftflip,yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100+leftclip+rightclip,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#rwb)'))
 #lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
             g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
+            #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')', mask='url(#mask1)'))
             if above:
                 yt = ypad+ypos-8
                 if col == "blue":
