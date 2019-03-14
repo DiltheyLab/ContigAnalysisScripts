@@ -6,7 +6,7 @@ from itertools import combinations
 from random import sample
 from svgwrite.container import Group
 from Bio import SeqIO
-from collections import defaultdict
+from collections import defaultdict, deque
 from scaffold import Scaffold, Scaffolds
 
 
@@ -36,16 +36,54 @@ if args.blacklist:
                 idx, ctg =  line.strip().split()[0:2]
                 blacklist[idx].add(ctg)
 
+whitelist_ctgs = set()
+whitelist_lreads = set()
+if(args.whitelist):
+    with open(args.whitelist) as f:
+        for line in f:
+            whitelist_ctgs.add(line.strip())
+elif(args.whitelist_lrs):
+    with open(args.whitelist_lrs) as f:
+        for line in f:
+            whitelist_lreads.add(line.strip())
 
 contigs = {}
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
 
-scafs = Scaffolds(args.inputfiles, blacklist, args.linename)
+scafs = Scaffolds(args.inputfiles, blacklist, args.linename, whitelist_lreads)
+if whitelist_ctgs:
+    scafs.filter_whitelist_ctgs(whitelist_ctgs)
 scafs.filter_contigcounts(args.mincontigs)
 scafs.turn_longreads_around()
-lreads = scafs.lreads
+scafs.sort_by_starts()
+print("Reads meeting criteria: " + str(len(scafs.lreads)))
+distances = scafs.pseudoalign_all()
+#lreads = scafs.lreads
+
+lreads = scafs.lreads.copy()
+
+# find clusters:
+clusters = []
+while lreads:
+    # build cluster from random chosen read
+    lrid, lread = lreads.popitem()
+    cluster = [lrid]
+    to_analyze = deque([lrid])
+    while to_analyze:
+        citem = to_analyze.popleft()
+        nitems = set(distances[citem].keys()) & lreads.keys()
+        for item in nitems:
+            cluster.append(item)
+            to_analyze.append(item)
+            del(lreads[item])
+    clusters.append(cluster)
+print("Number of clusters found: " + str(len(clusters)))
+
+#for cluster in clusters:
+     
+
 
 
 #greadst.update(intreads)
@@ -167,6 +205,7 @@ if args.alignreads:
             lr_dists[lrs[0]][lrs[1]]=dists[0]
             lr_dists[lrs[1]][lrs[0]]=-dists[0]
     #print(lr_dists)
+
 
     for cluster in creads:
         print(cluster)
