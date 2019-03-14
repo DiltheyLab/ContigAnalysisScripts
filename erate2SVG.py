@@ -59,202 +59,59 @@ scafs.filter_contigcounts(args.mincontigs)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
-distances = scafs.pseudoalign_all()
+lr_dists = scafs.pseudoalign_all()
 #lreads = scafs.lreads
 
 lreads = scafs.lreads.copy()
 
 # find clusters:
-clusters = []
+creads = []
 while lreads:
     # build cluster from random chosen read
     lrid, lread = lreads.popitem()
-    cluster = [lrid]
+    cluster = deque([lrid])
     to_analyze = deque([lrid])
     while to_analyze:
         citem = to_analyze.popleft()
-        nitems = set(distances[citem].keys()) & lreads.keys()
+        nitems = set(lr_dists[citem].keys()) & lreads.keys()
         for item in nitems:
             cluster.append(item)
             to_analyze.append(item)
             del(lreads[item])
-    clusters.append(cluster)
-print("Number of clusters found: " + str(len(clusters)))
-
-#for cluster in clusters:
-     
+    creads.append(cluster)
+print("Number of clusters found: " + str(len(creads)))
 
 
-
-#greadst.update(intreads)
-
-
-# sort contigs by left coordinate
-for rid in lreads:
-    soverlaps = sorted(lreads[rid]["maps"], key = itemgetter("scr"))
-    lreads[rid]["maps"]=soverlaps
-
-ogreads = lreads.copy()
-print("length lreads: " + str(len(lreads)))
-
-
-# cluster np-reads or only keep whitelisted ones
-creads = {}
-ccontigs = {}
-whitelist = set()
-clusternr = 0
-if(args.whitelist):
-    with open(args.whitelist) as f:
-        for line in f:
-            whitelist.add(line.strip())
-    creads[0] = {}
-    for rid,read in lreads.items():
-        for mapping in read["maps"]:
-            if mapping["name"] in whitelist:
-                creads[0][rid] = read
-elif(args.whitelist_lrs):
-    with open(args.whitelist_lrs) as f:
-        for line in f:
-            whitelist.add(line.strip())
-    creads[0] = {}
-    for rid,read in lreads.items():
-        if rid in whitelist:
-            creads[0][rid] = read
-else:
-    while len(lreads) > 0:
-        clusternr += 1
-        current_cluster = {}
-        current_contigs = set()
-        # take a random read and build a cluster from it
-
-        ck = sample(lreads.keys(),1)[0]
-        #print(ck)
-        cr = (ck, lreads[ck])
-        #cr = lreads.popitem()
-        current_cluster[cr[0]] = cr[1]
-        #for contig in cr[1]["maps"]:
-        #    if not contig["name"].startswith("chr"):
-        #        current_contigs.add(contig["name"])
-        #print(len(current_cluster))
-        olen = 0
-        while len(current_cluster) != olen:
-            olen = len(current_cluster)
-            for contig in cr[1]["maps"]:
-                if not contig["name"].startswith("chr"):
-                    current_contigs.add(contig["name"])
-            del(lreads[cr[0]])
-            #print("contigs: " + str(current_contigs))
-            for readid,readval in lreads.items():
-                contig_found = False
-                for contig in readval["maps"]:
-                    if contig["name"] in current_contigs:
-                        contig_found = True
-                        current_cluster[readid] = readval
-                        cr = (readid, lreads[readid])
-                        break
-                if contig_found:
-                    break
-            
-        print("cluster length: " + str(len(current_cluster)))
-        creads[clusternr] = current_cluster
-        ccontigs[clusternr] = current_contigs
-
-def compare_longreads(lr1, lr2):
-    l1c = []
-    l2c = []
-    for m in lr1["maps"]:
-        cn = m["name"]
-        if not cn.startswith("chr"):
-            l1c.append(cn)
-    for m in lr2["maps"]:
-        cn = m["name"]
-        if not cn.startswith("chr"):
-            l2c.append(cn)
-    common_ctgs = set(l1c).intersection(set(l2c))
-    return common_ctgs
-
-
-def get_contig_info(lr,ctg):
-    for maps in lr["maps"]:    
-        if maps["name"] == ctg:
-            return maps
-
-# calculate distances for each cluster
-def get_distances(lr1,lr2, common_ctgs):
-    dists = []
-    for ctg in common_ctgs:
-        m1 = get_contig_info(lr1,ctg)
-        m2 = get_contig_info(lr2,ctg)
-        dists.append((m1["scr"]-m1["scc"]) - (m2["scr"]-m2["scc"]))
-    return dists
-            
-#lr_dist = defaultdict(lambda:([],[]))
-lr_dists = {}
-#initialize matrix
-for lid, read in ogreads.items():
-    lr_dists[lid] = {lid:0}
-
-sorted_reads = {}
+sorted_reads = []
+smids = []
+smoffs = []
+sorted_clusters = []
 if args.alignreads:
-    for lrs in combinations(ogreads.keys(), 2):
-        lr1 = ogreads[lrs[0]]
-        lr2 = ogreads[lrs[1]]
-        common_ctgs = compare_longreads(lr1, lr2)
-        if len(common_ctgs) > 0:
-            dists = get_distances(lr1, lr2, common_ctgs)
-            lr_dists[lrs[0]][lrs[1]]=dists[0]
-            lr_dists[lrs[1]][lrs[0]]=-dists[0]
-    #print(lr_dists)
-
-
     for cluster in creads:
-        print(cluster)
-        #print("ccontigs: " + str(ccontigs[cluster]))
-        #print(creads[cluster].keys())
-        # find leftmost read 
-        print("cluster length: " + str(len(creads[cluster])))
-        while True:
-            rid = sample(creads[cluster].keys(),1)[0]
-            for rid2 in creads[cluster].keys():
-                if rid2 in lr_dists[rid]:
-                    if lr_dists[rid][rid2] < 0:
-                        rid = rid2
-                        break
-            break
-        srid = rid
+        clst = cluster.copy()
+        origin = clst.popleft()
+        distance_known = set([origin])
+        while clst:
+            citem = clst.popleft()
+            if citem not in lr_dists[origin]:
+                for bitem in distance_known:
+                    if bitem in lr_dists[citem]:
+                        lr_dists[origin][citem] = lr_dists[origin][bitem] + lr_dists[bitem][citem]
+                        lr_dists[citem][origin] = -(lr_dists[origin][bitem] + lr_dists[bitem][citem])
+            distance_known.add(citem)
+        #print(lr_dists[origin])
+        #print(len(lr_dists[origin]))
+        sorted_reads = sorted(lr_dists[origin], key = lambda x: lr_dists[origin][x])
+        smid = sorted_reads[0]
+        #print(smid)
+        for item in lr_dists[origin]:
+            if item not in lr_dists[smid]:
+                lr_dists[smid][item] = lr_dists[smid][origin] + lr_dists[origin][item]
+        #print(lr_dists[smid])
+        #print(len(lr_dists[smid]))
 
-        # fill lr_dists with transitive distances
-        A = set(creads[cluster].keys())
-        B = set(lr_dists[srid].keys())
-        U = A-B
-        UC = U.copy()
-        while True:
-            for rid in U:
-                for rid2 in lr_dists[rid]:
-                    if rid2 in B:
-                        lr_dists[srid][rid] = lr_dists[srid][rid2] + lr_dists[rid2][rid]
-                        lr_dists[rid][srid] = lr_dists[srid][rid]
-                        UC.remove(rid)
-                        break
-            U = UC.copy()
-            if not U:
-                break
-       
-        # now there is a new leftmost read
-        smval = 0
-        nsrid = srid
-        for rid2 in lr_dists[srid]:
-            if lr_dists[srid][rid2] < smval:
-                smval = lr_dists[srid][rid2]
-                nsrid = rid2
-        
-        sorted_reads[cluster] = sorted(creads[cluster].keys(), key=lambda x: lr_dists[srid][x])
+        sorted_clusters.append(sorted_reads)
 
-        # store resulsts of this
-        creads[cluster]["smallest_id"] = srid #for this id all values are present in lr_dists
-        creads[cluster]["smallest_offset"] = -smval
-
-#sys.exit(0)
 
 
 # draw interesting reads
@@ -284,12 +141,11 @@ def shortname(ctgname):
         return ctgname
 
 csize = 0
-if args.alignreads:
-    clustered_reads = sorted_reads
-else:
-    clustered_reads = creads
+if not args.alignreads:
+    sorted_clusters = creads
+
 gradient_idc = 0
-for cluster in clustered_reads:
+for cluster in sorted_clusters:
     for rid in clustered_reads[cluster]:
         if rid.startswith("small"):
             continue
