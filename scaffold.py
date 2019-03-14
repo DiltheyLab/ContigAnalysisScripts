@@ -50,6 +50,8 @@ class Scaffolds:
                             tmp = int(lenc) - int(ecc)
                             ecc = int(lenc) - int(scc)
                             scc = tmp
+                    if self.cellline not in ctg:
+                        continue
                     data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
                     if whitelist:
                         if rid not in whitelist:
@@ -64,6 +66,7 @@ class Scaffolds:
                             continue
                     self.ctg2lreads[ctg].add(rid)
                     if rid in self.lreads:
+                        self.lreads[rid]["ctgset"].add(ctg)
                         self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["maps"].append(data)
                         if int(ecr) > self.lreads[rid]["rm_ecr"]:
@@ -72,6 +75,8 @@ class Scaffolds:
                             self.lreads[rid]["lm_scr"] = int(scr)
                     else:
                         self.lreads[rid] = {}
+                        self.lreads[rid]["ctgset"] = set()
+                        self.lreads[rid]["ctgset"].add(ctg)
                         self.lreads[rid]["length"] = int(lenr)
                         # maps is just a list. mapsc allows for easy access to all contigs with a certain name
                         self.lreads[rid]["maps"] = [data]
@@ -103,6 +108,7 @@ class Scaffolds:
         self.lreads[rid]["mapsc"][ctgn].remove(ctg)
         if not self.lreads[rid]["mapsc"][ctgn]: # if there is no contig with this name left in the read
             self.ctg2lreads[ctgn].remove(rid)
+            self.lreads[rid]["ctgset"].remove(ctgn)
 
     def filter_small_contigs(self, size):
         for rid,read in self.lreads.items():
@@ -209,6 +215,52 @@ class Scaffolds:
                 else:
                     overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
         return overall_score
+
+    def get_possible_offsets(self, lr1, lr2):
+        samectgs = self.lreads[lr1]["ctgset"] & self.lreads[lr2]["ctgset"]
+        poffs = []
+        if not samectgs:
+            return []
+        else:
+            for ctgn in samectgs:
+                ctgs1 = self.lreads[lr1]["mapsc"][ctgn]
+                ctgs2 = self.lreads[lr2]["mapsc"][ctgn]
+                for ctg1, ctg2 in product(ctgs1, ctgs2):
+                    d1 = ctg1["scr"] - ctg1["scc"]
+                    d2 = ctg2["scr"] - ctg2["scc"]
+                    poffs.append(d2 - d1)
+            roffs = []
+            for off in poffs:
+                for coff in roffs:
+                    if abs(off - coff) < 100:
+                        break
+                else:
+                    roffs.append(off)
+            return roffs
+
+
+
+    
+    def pseudoalign_all(self):
+        tableau = defaultdict(dict)
+        toalign = self.lreads.copy()
+        while toalign:
+            lr1, lread1 = toalign.popitem()
+            for lr2 in toalign:
+                offs = self.get_possible_offsets(lr1,lr2)
+                scores = []
+                for offset in offs:
+                    scores.append(self.pseudoalign(lr1,lr2, offset))
+                if scores:
+                    if max(scores) > 0:
+                        #print("-"*40)
+                        #print(offs)
+                        #print(scores)
+                        sidx = scores.index(max(scores))
+                        tableau[lr1][lr2] = offs[sidx] # save offset in table, score doesn't matter 
+        return tableau
+
+
 
 
     def remove_problem_contigs(self,ctgn, prids):
