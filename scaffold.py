@@ -34,7 +34,7 @@ class Scaffolds:
         
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
-    def __init__(self, inputfiles, blacklist, line, whitelist = None):
+    def __init__(self, inputfiles, blacklist, line, whitelist_lreads = None):
         self.cellline = line
         for inputfilename in inputfiles:
             with open(inputfilename) as f:
@@ -53,8 +53,8 @@ class Scaffolds:
                     if self.cellline not in ctg:
                         continue
                     data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
-                    if whitelist:
-                        if rid not in whitelist:
+                    if whitelist_lreads:
+                        if rid not in whitelist_lreads:
                             continue
                     if blacklist:
                         if rid in blacklist:
@@ -84,6 +84,12 @@ class Scaffolds:
                         self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["rm_ecr"] = int(ecr)
                         self.lreads[rid]["lm_scr"] = int(scr)
+
+    def filter_whitelist_ctgs(self, whitelist_ctgs):
+        for rid in list(self.lreads.keys()):
+            if self.lreads[rid]["ctgset"] & whitelist_ctgs:
+                continue
+            del(self.lreads[rid])
 
     
     def filter_contigcounts(self, nr):
@@ -246,6 +252,7 @@ class Scaffolds:
         toalign = self.lreads.copy()
         while toalign:
             lr1, lread1 = toalign.popitem()
+            tableau[lr1][lr1] = 0
             for lr2 in toalign:
                 offs = self.get_possible_offsets(lr1,lr2)
                 scores = []
@@ -257,7 +264,8 @@ class Scaffolds:
                         #print(offs)
                         #print(scores)
                         sidx = scores.index(max(scores))
-                        tableau[lr1][lr2] = offs[sidx] # save offset in table, score doesn't matter 
+                        tableau[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
+                        tableau[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
         return tableau
 
 
