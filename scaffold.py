@@ -213,8 +213,8 @@ class Scaffolds:
                 if scoret > best_pair_score:
                     best_pair_score = scoret 
             if best_pair_score > 0:
+                #print("\t".join([ctg1["name"], ctg2["name"], "best_pair_score", str(best_pair_score),"distance",str(distance)]))
                 overall_score += best_pair_score
-                continue
             else: # check if problem for that contig
                 if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
                    continue
@@ -266,6 +266,9 @@ class Scaffolds:
                         sidx = scores.index(max(scores))
                         tableau[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
                         tableau[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
+                    elif max(scores) == 0:
+                        tableau[lr1][lr2] = None # distance can't be determined, but no contradiction
+                        tableau[lr2][lr1] = None # distance can't be determined, but no contradiction
         return tableau
 
 

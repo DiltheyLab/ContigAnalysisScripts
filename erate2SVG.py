@@ -58,29 +58,62 @@ if whitelist_ctgs:
 scafs.filter_contigcounts(args.mincontigs)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
+
+
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
 lr_dists = scafs.pseudoalign_all()
-#lreads = scafs.lreads
 
-lreads = scafs.lreads.copy()
+
+def nodes_fully_connected(nodes):
+    for node in nodes:
+        if nodes - lr_dists[node].keys():
+            return False
+    else:
+        return True
+
+def get_least_connected_node(nodes):
+    least_connections = len(nodes)
+    least_node = None
+    for node in nodes:
+        if len(lr_dists[node].keys() & nodes) < least_connections:
+            least_connections = len(lr_dists[node])
+            least_node = node
+    return least_node
+
+all_nodes = set(scafs.lreads.keys())
+creads = []
+while all_nodes:
+    nodes = all_nodes.copy()
+    while not nodes_fully_connected(nodes):
+        nos = get_least_connected_node(nodes)
+        nodes.remove(nos)
+    origin = sample(nodes, 1)[0]
+    creads.append(deque(sorted(nodes, key=lambda x: lr_dists[origin][x])))
+    all_nodes -=nodes
+
+
+
+#lreads = scafs.lreads.copy()
+
 
 # find clusters:
-creads = []
-while lreads:
+#creads = []
+#while lreads:
     # build cluster from random chosen read
-    lrid, lread = lreads.popitem()
-    cluster = deque([lrid])
-    to_analyze = deque([lrid])
-    while to_analyze:
-        citem = to_analyze.popleft()
-        nitems = set(lr_dists[citem].keys()) & lreads.keys()
-        for item in nitems:
-            cluster.append(item)
-            to_analyze.append(item)
-            del(lreads[item])
-    creads.append(cluster)
+#    lrid, lread = lreads.popitem()
+#    cluster = deque([lrid])
+#    to_analyze = deque([lrid])
+#    while to_analyze:
+#        citem = to_analyze.popleft()
+#        nitems = set(lr_dists[citem].keys()) & lreads.keys()
+#        for item in nitems:
+#            cluster.append(item)
+#            to_analyze.append(item)
+#            del(lreads[item])
+#    creads.append(cluster)
 print("Number of clusters found: " + str(len(creads)))
-
+for item in creads:
+    print("Number of reads: " + str(len(item)))
 
 sorted_reads = []
 smids = []
@@ -101,7 +134,7 @@ if args.alignreads:
             distance_known.add(citem)
         #print(lr_dists[origin])
         #print(len(lr_dists[origin]))
-        sorted_reads = sorted(lr_dists[origin], key = lambda x: lr_dists[origin][x])
+        sorted_reads = sorted(set(lr_dists[origin].keys()) & set(cluster), key = lambda x: lr_dists[origin][x])
         smid = sorted_reads[0]
         #print(smid)
         for item in lr_dists[origin]:
@@ -146,20 +179,18 @@ if not args.alignreads:
 
 gradient_idc = 0
 for cluster in sorted_clusters:
-    for rid in clustered_reads[cluster]:
-        if rid.startswith("small"):
-            continue
+    for rid in cluster:
         if args.alignreads:
-            xoffset = creads[cluster]["smallest_offset"] + lr_dists[creads[cluster]["smallest_id"]][rid]
+            xoffset = lr_dists[cluster[0]][rid]
         else:
             xoffset = 0
         ypos += 28
         dwg.add(dwg.text(rid, insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
         g = dwg.defs.add(Group(id=rid))
-        g.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+ogreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        g.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+scafs.lreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True
         col = "black"
-        for read in ogreads[rid]["maps"]:
+        for read in scafs.lreads[rid]["maps"]:
             #print(read)
             sc = read["scr"]
             ec = read["ecr"]
