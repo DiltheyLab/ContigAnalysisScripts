@@ -99,7 +99,6 @@ class Scaffolds:
             for item in read["maps"]:
                 if self.cellline in item["name"]:
                     counter +=1
-            
             if counter < nr:
                 toremove.add(rid)
         for rid in toremove:
@@ -115,6 +114,19 @@ class Scaffolds:
         if not self.lreads[rid]["mapsc"][ctgn]: # if there is no contig with this name left in the read
             self.ctg2lreads[ctgn].remove(rid)
             self.lreads[rid]["ctgset"].remove(ctgn)
+
+    # assume contigs are sorted
+    def filter_overlapped_contigs(self, fraction=0.5):
+        for rid,read in self.lreads.items():
+            toremove = []
+            last_end = 0
+            for ctg in read["maps"]:
+                if ctg["ecr"] < last_end:
+                    toremove.append(ctg)
+                else:
+                    last_end = ctg["ecr"]
+            for item in toremove:
+                self.remove_contig_from_read(rid, item)
 
     def filter_small_contigs(self, size):
         for rid,read in self.lreads.items():
@@ -247,7 +259,7 @@ class Scaffolds:
 
 
     
-    def pseudoalign_all(self):
+    def pseudoalign_all(self, debug=False):
         tableau = defaultdict(dict)
         toalign = self.lreads.copy()
         while toalign:
@@ -260,9 +272,10 @@ class Scaffolds:
                     scores.append(self.pseudoalign(lr1,lr2, offset))
                 if scores:
                     if max(scores) > 0:
-                        #print("-"*40)
-                        #print(offs)
-                        #print(scores)
+                        if debug:
+                            print("-"*40)
+                            print(offs)
+                            print(scores)
                         sidx = scores.index(max(scores))
                         tableau[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
                         tableau[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
