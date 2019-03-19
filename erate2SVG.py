@@ -61,10 +61,15 @@ reverse_mappers.add("344DBB")
 reverse_mappers.add("472DBB")
 scafs.turn_longreads_around(reverse_mappers)
 scafs.sort_by_starts()
+scafs.filter_small_contigs(300)
+scafs.filter_overlapped_contigs(0.5)
 
 
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
 lr_dists = scafs.pseudoalign_all()
+lr1 = "54c8d5d0-94a2-4e3d-895a-1424617e8693"
+lr2 = "88cf6e94-d3fc-4a31-aec3-005d19811d98"
+#print(scafs.pseudoalign(lr1,lr2))
 
 
 def nodes_fully_connected(nodes):
@@ -83,18 +88,86 @@ def get_least_connected_node(nodes):
             least_node = node
     return least_node
 
+def get_most_connected_node(nodes):
+    most_connections = 0
+    most_node = None
+    for node in nodes:
+        if len(lr_dists[node].keys() & nodes) > most_connections:
+            most_connections = len(lr_dists[node])
+            most_node = node
+    return most_node
+
+
+def N(node):
+    if node:
+        return set(lr_dists[node].keys()) - set([node])
+    else:
+        return set()
+
+def BronKerbosch2(R,P,X,cliques):
+    if (not P) and (not X):
+        cliques.append(R)
+    if P:
+        u = sample(P | X,1)[0]
+    else:
+        u = None
+    #print("  "*depth + "R: " + str(R))
+    #print("  "*depth + "P: " + str(P))
+    #print("  "*depth + "X: " + str(X))
+    #print("  "*(depth) + "u: " + str(u))
+    for v in (P - N(u)):
+        #print("  "*depth + "v: " + str(v))
+        #depth += 1
+        Rn = R | set([v])
+        Pn = (P-Rn) & N(v)
+        Xn = ((X & N(v)) - Rn) - Pn
+        BronKerbosch2(Rn, Pn, Xn,cliques)
+        #depth -= 1
+        P -= set(v)
+        X |= set(v)
+
+
+
+
 all_nodes = set(scafs.lreads.keys())
+
 creads = []
 while all_nodes:
-    nodes = all_nodes.copy()
-    while not nodes_fully_connected(nodes):
-        nos = get_least_connected_node(nodes)
-        nodes.remove(nos)
-    origin = sample(nodes, 1)[0]
-    creads.append(deque(sorted(nodes, key=lambda x: lr_dists[origin][x])))
-    all_nodes -=nodes
+    cliques = []
+    BronKerbosch2(set(),all_nodes,set(),cliques)
+    scliques = sorted(cliques, key = lambda x: len(x))
+    cluster = scliques[-1]
+    print(cluster)
+    origin = sample(cluster,1)[0]
+    for read in cluster:
+        if lr_dists[read][origin] > 0:
+            origin = read
+    creads.append(deque(sorted(cluster, key=lambda x: lr_dists[origin][x])))
+    all_nodes -= scliques[-1]
+for  cluster in creads:
+    for read in cluster:
+        print(read)
+#print(creads)
+#sys.exit()
+#while all_nodes:
+    #node1 = get_most_connected_node(all_nodes)
+    #candidates = lr_dists[nodes1]
 
 
+
+#    nodes = all_nodes.copy()
+#    while not nodes_fully_connected(nodes):
+#        nos = get_least_connected_node(nodes)
+#        print(nos + ": " + str(len(lr_dists[nos])))
+#        nodes.remove(nos)
+#    print("-"*30)
+#    origin = sample(nodes, 1)[0]
+#    creads.append(deque(sorted(nodes, key=lambda x: lr_dists[origin][x])))
+#    all_nodes -=nodes
+
+
+#for cluster in creads:
+#    print(cluster)
 
 #lreads = scafs.lreads.copy()
 
