@@ -56,7 +56,10 @@ scafs = Scaffolds(args.inputfiles, blacklist, args.linename, whitelist_lreads)
 if whitelist_ctgs:
     scafs.filter_whitelist_ctgs(whitelist_ctgs)
 scafs.filter_contigcounts(args.mincontigs)
-scafs.turn_longreads_around()
+reverse_mappers = set()
+reverse_mappers.add("344DBB")
+reverse_mappers.add("472DBB")
+scafs.turn_longreads_around(reverse_mappers)
 scafs.sort_by_starts()
 
 
@@ -209,7 +212,12 @@ for cluster in sorted_clusters:
             #clip_path.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100), ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1))
             #leftclip = scc/100
             #rightclip = (contigs[ctgn]-ecc)/100
-            lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctgn)]-ecc)/(ecc-scc), y1=0, y2=0))
+            xa = -scc/(ecc-scc)
+            xe = 1+(contigs[shortname(ctgn)]-ecc)/(ecc-scc)
+            if read["strand"] == 1:
+                xa = -(contigs[shortname(ctgn)]-ecc)/(ecc-scc)
+                xe = 1+scc/(ecc-scc)
+            lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=xa, x2=xe, y1=0, y2=0))
             if ctg.endswith("0") or ctg.endswith("1"):
                 col1 = "#FF0000"
                 col2 = "#0000FF"
