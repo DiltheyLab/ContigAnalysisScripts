@@ -23,6 +23,7 @@ class Scaffolds:
     lreads = {}
     cellline = ""
     ctg2lreads = defaultdict(set)
+    contig_lengths = {}
 
     def __str__(self):
         out = ""
@@ -52,6 +53,7 @@ class Scaffolds:
                             scc = tmp
                     if self.cellline not in ctg:
                         continue
+                    self.contig_lengths[ctg] = int(lenc)
                     data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
                     if whitelist_lreads:
                         if rid not in whitelist_lreads:
@@ -327,16 +329,15 @@ class Scaffolds:
         for rid in self.lreads:
             self.lreads[rid]["maps"] = sorted(self.lreads[rid]["maps"], key = lambda x: x["scr"])
 
-    def turn_longreads_around(self):
+    def turn_longreads_around(self, revs):
         for rid in self.lreads:
-            count0 = 0
-            count1 = 0
+            fcount = 0
             for contig in self.lreads[rid]["maps"]:
-                if contig["strand"] == 1:
-                    count1 += 1
+                if contig["name"] in revs:
+                    fcount += (contig["strand"]*2 - 1) # +1 if forward, -1 if revcomp
                 else:
-                    count0 += 1
-            if count1 > count0:
+                    fcount += (contig["strand"]*(-2) + 1) # -1 if forward, +1 if revcomp
+            if fcount < 0:
                 length = self.lreads[rid]["length"]
                 for contig in self.lreads[rid]["maps"]:
                     tmp = contig["scr"]
@@ -344,7 +345,6 @@ class Scaffolds:
                     contig["ecr"] = length - tmp
                     contig["strand"] = 0 if contig["strand"] == 1 else 1
                 
-        
 
 class Scaffold:
     cluster_counter = 0
