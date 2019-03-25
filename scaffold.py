@@ -233,7 +233,7 @@ class Scaffolds:
                 if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
                    continue
                 else:
-                    overall_score -= self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+                    overall_score -= 2*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
         return overall_score
 
     def get_possible_offsets(self, lr1, lr2):
@@ -262,11 +262,13 @@ class Scaffolds:
 
     
     def pseudoalign_all(self, debug=False):
-        tableau = defaultdict(dict)
+        dists = defaultdict(dict)
+        lr_scores = defaultdict(dict)
         toalign = self.lreads.copy()
         while toalign:
             lr1, lread1 = toalign.popitem()
-            tableau[lr1][lr1] = 0
+            dists[lr1][lr1] = 0
+            lr_scores[lr1][lr1] = 0
             for lr2 in toalign:
                 offs = self.get_possible_offsets(lr1,lr2)
                 scores = []
@@ -279,12 +281,14 @@ class Scaffolds:
                             print(offs)
                             print(scores)
                         sidx = scores.index(max(scores))
-                        tableau[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
-                        tableau[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
+                        dists[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
+                        dists[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
                     elif max(scores) == 0:
-                        tableau[lr1][lr2] = None # distance can't be determined, but no contradiction
-                        tableau[lr2][lr1] = None # distance can't be determined, but no contradiction
-        return tableau
+                        dists[lr1][lr2] = None # distance can't be determined, but no contradiction
+                        dists[lr2][lr1] = None # distance can't be determined, but no contradiction
+                    lr_scores[lr1][lr2] = max(scores)
+                    lr_scores[lr2][lr1] = max(scores)
+        return (lr_scores, dists)
 
 
 
