@@ -8,6 +8,7 @@ from svgwrite.container import Group
 from Bio import SeqIO
 from collections import defaultdict, deque
 from scaffold import Scaffold, Scaffolds
+import networkx as nx
 
 
 parser = ArgumentParser()
@@ -66,160 +67,158 @@ scafs.filter_overlapped_contigs(0.5)
 
 
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
-lr_dists = scafs.pseudoalign_all()
-lr1 = "54c8d5d0-94a2-4e3d-895a-1424617e8693"
-lr2 = "88cf6e94-d3fc-4a31-aec3-005d19811d98"
-#print(scafs.pseudoalign(lr1,lr2))
+print("Pseudoaligning all...")
+lr_scores, lr_dists = scafs.pseudoalign_all()
+print("Pseudoaligning finished")
 
-
-def nodes_fully_connected(nodes):
-    for node in nodes:
-        if nodes - lr_dists[node].keys():
-            return False
-    else:
-        return True
-
-def get_least_connected_node(nodes):
-    least_connections = len(nodes)
-    least_node = None
-    for node in nodes:
-        if len(lr_dists[node].keys() & nodes) < least_connections:
-            least_connections = len(lr_dists[node])
-            least_node = node
-    return least_node
-
-def get_most_connected_node(nodes):
-    most_connections = 0
-    most_node = None
-    for node in nodes:
-        if len(lr_dists[node].keys() & nodes) > most_connections:
-            most_connections = len(lr_dists[node])
-            most_node = node
-    return most_node
-
-
-def N(node):
+def N(node, dists):
     if node:
-        return set(lr_dists[node].keys()) - set([node])
+        return set(dists[node].keys()) - set([node])
     else:
         return set()
 
-def BronKerbosch2(R,P,X,cliques):
+def BronKerbosch2(R,P,X,cliques,dists):
     if (not P) and (not X):
         cliques.append(R)
     if P:
         u = sample(P | X,1)[0]
     else:
         u = None
-    #print("  "*depth + "R: " + str(R))
-    #print("  "*depth + "P: " + str(P))
-    #print("  "*depth + "X: " + str(X))
-    #print("  "*(depth) + "u: " + str(u))
-    for v in (P - N(u)):
-        #print("  "*depth + "v: " + str(v))
-        #depth += 1
+    for v in (P - N(u,dists)):
         Rn = R | set([v])
-        Pn = (P-Rn) & N(v)
-        Xn = ((X & N(v)) - Rn) - Pn
-        BronKerbosch2(Rn, Pn, Xn,cliques)
-        #depth -= 1
+        Pn = (P-Rn) & N(v, dists)
+        Xn = ((X & N(v, dists)) - Rn) - Pn
+        BronKerbosch2(Rn, Pn, Xn,cliques, dists)
         P -= set(v)
         X |= set(v)
 
-
-
-
 all_nodes = set(scafs.lreads.keys())
 
-creads = []
-while all_nodes:
-    cliques = []
-    BronKerbosch2(set(),all_nodes,set(),cliques)
-    scliques = sorted(cliques, key = lambda x: len(x))
-    cluster = scliques[-1]
-    print(cluster)
-    origin = sample(cluster,1)[0]
-    for read in cluster:
-        if lr_dists[read][origin] > 0:
-            origin = read
-    creads.append(deque(sorted(cluster, key=lambda x: lr_dists[origin][x])))
-    all_nodes -= scliques[-1]
-for  cluster in creads:
-    for read in cluster:
-        print(read)
-#print(creads)
-#sys.exit()
-#while all_nodes:
-    #node1 = get_most_connected_node(all_nodes)
-    #candidates = lr_dists[nodes1]
-
-
-
-#    nodes = all_nodes.copy()
-#    while not nodes_fully_connected(nodes):
-#        nos = get_least_connected_node(nodes)
-#        print(nos + ": " + str(len(lr_dists[nos])))
-#        nodes.remove(nos)
-#    print("-"*30)
-#    origin = sample(nodes, 1)[0]
-#    creads.append(deque(sorted(nodes, key=lambda x: lr_dists[origin][x])))
-#    all_nodes -=nodes
-
-
-#for cluster in creads:
-#    print(cluster)
-
-#lreads = scafs.lreads.copy()
-
-
-# find clusters:
+#print("Identifying cliques...")
 #creads = []
-#while lreads:
-    # build cluster from random chosen read
-#    lrid, lread = lreads.popitem()
-#    cluster = deque([lrid])
-#    to_analyze = deque([lrid])
-#    while to_analyze:
-#        citem = to_analyze.popleft()
-#        nitems = set(lr_dists[citem].keys()) & lreads.keys()
-#        for item in nitems:
-#            cluster.append(item)
-#            to_analyze.append(item)
-#            del(lreads[item])
-#    creads.append(cluster)
+#while all_nodes:
+    #cliques = []
+    #BronKerbosch2(set(),all_nodes,set(),cliques, lr_dists)
+    #scliques = sorted(cliques, key = lambda x: len(x))
+    #cluster = scliques[-1]
+    #origin = sample(cluster,1)[0]
+    #for read in cluster:
+        #if lr_dists[read][origin] > 0:
+            #origin = read
+    #if len(cluster) == 1: 
+        #break
+    #creads.append(deque(sorted(cluster, key=lambda x: lr_dists[origin][x])))
+    #all_nodes -= scliques[-1]
+#print("Clique identification finished...")
+
+# greedyly expand scaffold with best matching thing
+
+
+#clusters = defaultdict(list)
+#print(lr_scores)
+#clnr = 0
+#lrid2cluster = {}
+#for lr1i, lr1 in lr_scores.items():
+    ##print(lr1i)
+    #ms = max(lr1.values())
+    #lr2i = max(lr1.keys(), key=lambda x: lr1[x])
+    #if ms > 0:
+        #if lr2i not in lrid2cluster:
+            #lrid2cluster[lr1i] = clnr
+            #lrid2cluster[lr2i] = clnr
+            #clnr += 1
+            #clusters[clnr].append(lr1i)
+            #clusters[clnr].append(lr2i)
+        #else:
+            #lrid2cluster[lr1i] = lrid2cluster[lr2i]
+            #clusters[lrid2cluster[lr2i]].append(lr1i)
+    ##print("\t".join([lr1i, lr2, str(ms)]))
+    ##print(lr1)
+#creads = []
+#for nr,cluster in clusters.items():
+    #origin = sample(cluster,1)[0]
+    #for read in cluster:
+        #if lr_dists[read][origin] > 0:
+            #origin = read
+    #creads.append(deque(sorted(cluster, key=lambda x: lr_dists[origin][x])))
+    
+gr = nx.DiGraph()
+for lr1i, lr1 in lr_scores.items():
+    if lr1i not in gr.nodes():
+        gr.add_node(lr1i)
+    ms = max(lr1.values())
+    lr2i = max(lr1.keys(), key=lambda x: lr1[x])
+    if lr2i not in gr.nodes():
+        gr.add_node(lr2i)
+    #print(lr2i)
+    #print(lr_dists[lr1i][lr2i])
+    gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
+    gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
+
+
+creads = []
+for component in list(nx.connected_components((gr.to_undirected()))):
+    # get all distances from random anchor node
+    anchor = sample(component,1)[0]
+    worklist = deque([anchor])
+    ns = gr.neighbors(anchor)
+    for n in ns:
+        worklist.append(n)
+    while worklist:
+        #print("worklist: " + str(len(worklist)))
+        cn = worklist.popleft()
+        ns = nx.neighbors(gr,cn)
+        #print("ns: " + str(len(ns)))
+        for n in ns:
+            if (anchor, n) not in gr.edges():
+                gr.add_edge(anchor,n, dist=gr[anchor][cn]["dist"] + gr[cn][n]["dist"])
+                gr.add_edge(n, anchor, dist= - gr[anchor][cn]["dist"] - gr[cn][n]["dist"])
+                worklist.append(n)
+    # now get all distances from the leftmost node
+    minnode = min(gr[anchor], key = lambda x: gr[anchor][x]["dist"])
+    for node in set(component):
+        gr.add_edge(minnode, node, dist = gr[minnode][anchor]["dist"] + gr[anchor][node]["dist"])
+        gr.add_edge(node, minnode, dist = -gr[minnode][anchor]["dist"] - gr[anchor][node]["dist"])
+    # put this in data structure that's used by the plotting, update lr_dists
+    creads.append(deque(sorted(component, key=lambda x: gr[minnode][x]["dist"])))
+    #print(g[minnode])
+
+            
+
+
 print("Number of clusters found: " + str(len(creads)))
 for item in creads:
     print("Number of reads: " + str(len(item)))
 
-sorted_reads = []
-smids = []
-smoffs = []
-sorted_clusters = []
-if args.alignreads:
-    for cluster in creads:
-        clst = cluster.copy()
-        origin = clst.popleft()
-        distance_known = set([origin])
-        while clst:
-            citem = clst.popleft()
-            if citem not in lr_dists[origin]:
-                for bitem in distance_known:
-                    if bitem in lr_dists[citem]:
-                        lr_dists[origin][citem] = lr_dists[origin][bitem] + lr_dists[bitem][citem]
-                        lr_dists[citem][origin] = -(lr_dists[origin][bitem] + lr_dists[bitem][citem])
-            distance_known.add(citem)
-        #print(lr_dists[origin])
-        #print(len(lr_dists[origin]))
-        sorted_reads = sorted(set(lr_dists[origin].keys()) & set(cluster), key = lambda x: lr_dists[origin][x])
-        smid = sorted_reads[0]
-        #print(smid)
-        for item in lr_dists[origin]:
-            if item not in lr_dists[smid]:
-                lr_dists[smid][item] = lr_dists[smid][origin] + lr_dists[origin][item]
-        #print(lr_dists[smid])
-        #print(len(lr_dists[smid]))
-
-        sorted_clusters.append(sorted_reads)
+#sorted_reads = []
+#smids = []
+#smoffs = []
+#sorted_clusters = []
+#if args.alignreads:
+    #for cluster in creads:
+        #clst = cluster.copy()
+        #origin = clst.popleft()
+        #distance_known = set([origin])
+        #while clst:
+            #citem = clst.popleft()
+            #if citem not in lr_dists[origin]:
+                #for bitem in distance_known:
+                    #if bitem in lr_dists[citem]:
+                        #lr_dists[origin][citem] = lr_dists[origin][bitem] + lr_dists[bitem][citem]
+                        #lr_dists[citem][origin] = -(lr_dists[origin][bitem] + lr_dists[bitem][citem])
+            #distance_known.add(citem)
+        ##print(lr_dists[origin])
+        ##print(len(lr_dists[origin]))
+        #sorted_reads = sorted(set(lr_dists[origin].keys()) & set(cluster), key = lambda x: lr_dists[origin][x])
+        #smid = sorted_reads[0]
+        ##print(smid)
+        #for item in lr_dists[origin]:
+            #if item not in lr_dists[smid]:
+                #lr_dists[smid][item] = lr_dists[smid][origin] + lr_dists[origin][item]
+        ##print(lr_dists[smid])
+        ##print(len(lr_dists[smid]))
+#
+        #sorted_clusters.append(sorted_reads)
 
 
 
@@ -250,14 +249,13 @@ def shortname(ctgname):
         return ctgname
 
 csize = 0
-if not args.alignreads:
-    sorted_clusters = creads
+sorted_clusters = creads
 
 gradient_idc = 0
 for cluster in sorted_clusters:
     for rid in cluster:
         if args.alignreads:
-            xoffset = lr_dists[cluster[0]][rid]
+            xoffset = gr[cluster[0]][rid]["dist"]
         else:
             xoffset = 0
         ypos += 28
