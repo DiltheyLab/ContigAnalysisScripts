@@ -8,10 +8,11 @@ import numpy as np
 import random
 from operator import itemgetter
 from itertools import combinations, cycle, product
-from collections import defaultdict
+from collections import defaultdict, deque
 import svgwrite
 import squarify
-from scaffold import Scaffold, Scaffolds
+from scaffold import Scaffold, Scaffolds, Scaffold2
+import networkx as nx
 
 parser = ArgumentParser()
 parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format", nargs="+")
@@ -137,38 +138,69 @@ def shortname(ctgname):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
-lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
-lrs.filter_contigcounts(args.mincontigs)
-lrs.filter_small_contigs(300)
-lrs.filter_reverse_small_contigs(600)
-lrs.turn_longreads_around()
-lrs.sort_by_starts()
+scafs = Scaffolds(args.inputfiles, blacklist, args.linename)
+scafs.filter_contigcounts(args.mincontigs)
+scafs.filter_whitelist_ctgs(set(["100APD", "330APD"]))
+scafs.filter_small_contigs(300)
+scafs.filter_reverse_small_contigs(600)
+scafs.turn_longreads_around()
+scafs.sort_by_starts()
 
-print("Pseudoalignment started")
-ph = lrs.identify_hairpins()
-if len(ph) > 0:
-    print("Potential Hairpins")
-    for lr, nr in ph.items():
-        if nr > 2:
-            print(lr + ": " + str(nr))
-print("Pseudoalignment started")
-pctgs = lrs.get_problem_contigs()
-#print(pctgs)
-for pair, nr in pctgs.items():
-    print(str(pair) + ": " + str(nr))
-#print(len(pctgs))
-#print(pctgs["2443APD"])
-#pctg = "2443APD"
+print("Pseudoaligning all...")
+lr_scores, lr_dists = scafs.pseudoalign_all()
+print("Pseudoaligning finished")
 
-while pctgs:
-    pctg = list(pctgs.keys()).pop()
-    print("solving problems for " + pctg)
-    lrs.remove_problem_contigs(pctg, pctgs[pctg])
-    pctgs = lrs.get_problem_contigs()
 
-#f67f9b65-2333-4ccd-beb4-08bc086545eb
+# greedyly expand components with best matching thing
+gr = nx.DiGraph()
+for lr1i, lr1 in lr_scores.items():
+    if lr1i not in gr.nodes():
+        gr.add_node(lr1i)
+    ms = max(lr1.values())
+    lr2i = max(lr1.keys(), key=lambda x: lr1[x])
+    if lr2i not in gr.nodes():
+        gr.add_node(lr2i)
+    #print(lr2i)
+    #print(lr_dists[lr1i][lr2i])
+    gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
+    gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
+
+
+# order components
+creads = []
+for component in list(nx.connected_components((gr.to_undirected()))):
+    # get all distances from random anchor node
+    anchor = random.sample(component,1)[0]
+    worklist = deque([anchor])
+    ns = gr.neighbors(anchor)
+    for n in ns:
+        worklist.append(n)
+    while worklist:
+        #print("worklist: " + str(len(worklist)))
+        cn = worklist.popleft()
+        ns = nx.neighbors(gr,cn)
+        #print("ns: " + str(len(ns)))
+        for n in ns:
+            if (anchor, n) not in gr.edges():
+                gr.add_edge(anchor,n, dist=gr[anchor][cn]["dist"] + gr[cn][n]["dist"])
+                gr.add_edge(n, anchor, dist= - gr[anchor][cn]["dist"] - gr[cn][n]["dist"])
+                worklist.append(n)
+    # now get all distances from the leftmost node
+    minnode = min(gr[anchor], key = lambda x: gr[anchor][x]["dist"])
+    for node in set(component):
+        gr.add_edge(minnode, node, dist = gr[minnode][anchor]["dist"] + gr[anchor][node]["dist"])
+        gr.add_edge(node, minnode, dist = -gr[minnode][anchor]["dist"] - gr[anchor][node]["dist"])
+    # put this in data structure that's used by the plotting, update lr_dists
+    creads.append(deque(sorted(component, key=lambda x: gr[minnode][x]["dist"])))
+    #print(g[minnode])
+
+# merge reads
+for cluster in creads:
+    print("Length of cluster: " + str(len(cluster)))
+    # build average boi
+    clusterboi = Scaffold2(cluster, scafs.lreads, gr)
 sys.exit()
-scaffolds = lrs.construct_scaffolds(allcontigs)
+
 
 #scaffolds = {}
 #for rid in scafs.lreads:

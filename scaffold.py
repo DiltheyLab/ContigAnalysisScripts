@@ -1,5 +1,6 @@
 from itertools import combinations, cycle, product
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, deque
+from statistics import mean
 import svgwrite
 import sys
 
@@ -46,15 +47,16 @@ class Scaffolds:
                         [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
                         strand = 0 if strandstring == "+" else 1
                     else:
-                        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strand, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
-                        if strand == "1": # workaround for misleading coordinates in erates file
+                        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strandstring, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+                        strand = 0 if strandstring == "0" else 1
+                        if strand == 1: # workaround for misleading coordinates in erates file
                             tmp = int(lenc) - int(ecc)
                             ecc = int(lenc) - int(scc)
                             scc = tmp
                     if self.cellline not in ctg:
                         continue
                     self.contig_lengths[ctg] = int(lenc)
-                    data = {"name":ctg,"strand":int(strand),"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                    data = {"name":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
                     if whitelist_lreads:
                         if rid not in whitelist_lreads:
                             continue
@@ -346,7 +348,7 @@ class Scaffolds:
         for rid in self.lreads:
             self.lreads[rid]["maps"] = sorted(self.lreads[rid]["maps"], key = lambda x: x["scr"])
 
-    def turn_longreads_around(self, revs):
+    def turn_longreads_around(self, revs=[]):
         for rid in self.lreads:
             fcount = 0
             for contig in self.lreads[rid]["maps"]:
@@ -1320,3 +1322,197 @@ class Scaffold:
         newinst.idx = id(newinst)
         return newinst
     #add_seq_info(self):
+
+class Scaffold2:
+    lrids = deque()
+
+    # poor man's kmeans clustering
+    def split_distances(self, distances, tolerance):
+        clusters = []
+        indices = []
+        for didx, dist in enumerate(distances):
+            for cidx, cluster in enumerate(clusters):
+                if abs(mean(cluster)-dist) < tolerance:
+                    cluster.append(dist)
+                    indices[cidx].append(didx)
+                    break
+            else:
+                clusters.append([dist])
+                indices.append([didx])
+        return (indices, clusters)
+
+    
+    def __init__(self, longreadids, longreads, dists):
+        self.lrids = longreadids
+        # longreads should be ordered, such that longreads[0] holds the leftmost read
+        # for which all distances to all other longreads is known and in dists
+        origin = longreadids[0]
+
+        # pseudo MSA with consensus
+        vstarts = defaultdict(list)
+        ctgs = defaultdict(list)
+        for lrid, lr in longreads.items():
+            for contig in lr["maps"]:
+                vstarts[contig["name"]].append(dists[origin][lrid]["dist"] + contig["scr"] - contig["scc"])
+                ctgs[contig["name"]].append(contig)
+        #print(vstarts)
+        for ctgn, ctgdists in vstarts.items():
+            #print(ctgs[ctgn])
+            #print(dist_with_ctg)
+            #ctgdists, ctg = dist_with_ctg
+            indices, clustered_dists = self.split_distances(ctgdists, 600)
+            #print(indices)
+            for clusteridx, cluster in enumerate(clustered_dists):
+                sccs = []
+                eccs = []
+                strands = []
+                for ctgidx in indices[clusteridx]:
+                    sccs.append(ctgs[ctgn][ctgidx]["scc"])
+                    eccs.append(ctgs[ctgn][ctgidx]["ecc"])
+                    strands.append(ctgs[ctgn][ctgidx]["strand"])
+                newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":min(sccs), "ecc":max(eccs), "scr":round(mean(cluster)) + min(sccs), "ecr":round(mean(cluster))+ max(eccs)}
+
+                data = {"name":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                self.ctg2lreads[ctg].add(rid)
+                if rid in self.lreads:
+                    self.lreads[rid]["ctgset"].add(ctg)
+                    self.lreads[rid]["mapsc"][ctg].append(data)
+                    self.lreads[rid]["maps"].append(data)
+                    if int(ecr) > self.lreads[rid]["rm_ecr"]:
+                        self.lreads[rid]["rm_ecr"] = int(ecr)
+                    if int(scr) < self.lreads[rid]["lm_scr"]:
+                        self.lreads[rid]["lm_scr"] = int(scr)
+                else:
+                    self.lreads[rid] = {}
+                    self.lreads[rid]["ctgset"] = set()
+                    self.lreads[rid]["ctgset"].add(ctg)
+                    self.lreads[rid]["length"] = int(lenr)
+                    # maps is just a list. mapsc allows for easy access to all contigs with a certain name
+                    self.lreads[rid]["maps"] = [data]
+                    self.lreads[rid]["mapsc"] = defaultdict(list)
+                    self.lreads[rid]["mapsc"][ctg].append(data)
+                    self.lreads[rid]["rm_ecr"] = int(ecr)
+                    self.lreads[rid]["lm_scr"] = int(scr)
+
+
+            
+        
+
+    # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
+    def to_SVG(self, img, contigs, xoff, yoff):
+        ypad = 7
+        col = "black"
+        nr_longreads = len(self.longread_coords)
+        ypos = 0
+        #if show_lr_ids:
+        #    y_space_per_longread = 4
+        #    for lrid, lrc in self.longread_coords.items():
+        #        ylen = nr_longreads * y_space_per_longread - ypos
+        #        rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
+        #        rect.fill(color="none").dasharray([2, 2])
+        #        img.add(img.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
+        #        ypos += y_space_per_longread
+        ypos += ypad
+            
+        img.add(svgwrite.shapes.Line((xoff, yoff+ypos), ( xoff + self.length/100, yoff+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
+
+        ctg_y_drawsize = 8
+        ctg_y_halfdrawsize = ctg_y_drawsize/2
+        ctg_relative_positions = cycle([-ctg_y_halfdrawsize-1, ctg_y_halfdrawsize+3, -ctg_y_halfdrawsize-4, ctg_y_halfdrawsize+6])
+
+        gradient_idc = 0
+
+        def get_colors_from_nr(nr):
+            col1 = "#000000"
+            col2 = "#000000"
+            if nr==0 or nr==1:
+                col1 = "#FF0000"
+                col2 = "#0000FF"
+            elif nr==2 or nr==3:
+                col1 = "#FFE119"
+                col2 = "#000000"
+            elif nr==4 or nr==5:
+                col1 = "#911eb4"
+                col2 = "#a9a9a9"
+            elif nr==6 or nr==7:
+                col1 = "#000075"
+                col2 = "#f58231"
+            elif nr==8 or nr==9:
+                col1 = "#e6beff"
+                col2 = "#808000"
+            return [col1, col2]
+
+        def get_colors(ctgn):
+            col1, col2 = get_colors_from_nr(int(ctgn[-1]))
+            total = 0
+            for char in ctgn:
+                total += int(char)
+            col3, col4 = get_colors_from_nr(total % 10)
+            return [col1, col2, col3, col4]
+
+        for ctg in sorted(self.contigset, key= lambda x: self.left_coords[x]):
+            #print(read)
+            sc = self.left_coords[ctg]
+            ec = self.right_coords[ctg]
+            scc = self.left_coords_contig[ctg]
+            ecc = self.right_coords_contig[ctg]
+            ctgn = ctg.rstrip(self.linename)
+            ctgn2 = ctg.rstrip("rc").rstrip(self.linename)
+            #ctg = read[0]
+            if ctg.startswith("chr"):
+                ctgn = ctgn[0:9]
+            else:
+                ctgn = "$" + ctgn + "q"
+
+            gradient_idc += 1
+            gradient_id1 = self.name + "_" + str(gradient_idc)
+            gradient_idc += 1
+            gradient_id2 = self.name + "_" + str(gradient_idc)
+            lineargrad1 = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id1 , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            lineargrad2 = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id2 , x1=-scc/(ecc-scc), x2=1+(contigs[shortname(ctg)]-ecc)/(ecc-scc), y1=0, y2=0))
+            col1, col2, col3, col4 = get_colors(shortname(ctgn2))
+                
+            lineargrad1.add_stop_color("0%",col1)
+            lineargrad1.add_stop_color("50%","#FFFFFF")
+            lineargrad1.add_stop_color("100%",col2)
+            lineargrad2.add_stop_color("0%",col3)
+            lineargrad2.add_stop_color("50%","#FFFFFF")
+            lineargrad2.add_stop_color("100%",col4)
+
+            #leftclip = scc/100
+            #rightclip = (contigs[shortname(ctg)]-ecc)/100
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')', clip_path='url(#mask1)' ))
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
+            x = xoff + sc/100
+            y = yoff + ypos-ctg_y_halfdrawsize
+            w = (ec-sc)/100
+            h = 2*ctg_y_halfdrawsize
+            #img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(w),"0","L","0",str(h),"L",str(-w),str(-h)]), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')' ))
+            img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x+w),str(y),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id1 + ')' ))
+            img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x),str(y+h),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id2 + ')' ))
+            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
+            #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
+            yt = yoff + ypos + next(ctg_relative_positions)
+            img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
+            if self.orientation[ctg] == 0:
+                direction = ">"
+            else:
+                direction = "<"
+            img.add(img.text(direction, insert=(xoff+sc/100,yoff+ypos+2),style="font-size:6"))
+        for ctg in sorted(self.contigset_sr, key= lambda x: self.left_coords[x]):
+            #print(read)
+            sc = self.left_coords[ctg]
+            ec = self.right_coords[ctg]
+            ctgn = ctg.rstrip(self.linename)
+            ctgn = "$" + ctgn + "q"
+            img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='grey', stroke_width=1, fill = 'white'))
+            col = "gray"
+            yt = yoff + ypos + next(ctg_relative_positions)
+            img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
+            if self.orientation[ctg] == 0:
+                direction = ">"
+            else:
+                direction = "<"
+            img.add(img.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
+        return ypos+7
+
