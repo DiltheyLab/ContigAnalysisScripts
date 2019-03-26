@@ -64,6 +64,7 @@ scafs.turn_longreads_around(reverse_mappers)
 scafs.sort_by_starts()
 scafs.filter_small_contigs(300)
 scafs.filter_overlapped_contigs(0.5)
+scafs.filter_contigcounts(args.mincontigs) 
 
 
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
@@ -111,37 +112,9 @@ all_nodes = set(scafs.lreads.keys())
     #all_nodes -= scliques[-1]
 #print("Clique identification finished...")
 
-# greedyly expand scaffold with best matching thing
 
 
-#clusters = defaultdict(list)
-#print(lr_scores)
-#clnr = 0
-#lrid2cluster = {}
-#for lr1i, lr1 in lr_scores.items():
-    ##print(lr1i)
-    #ms = max(lr1.values())
-    #lr2i = max(lr1.keys(), key=lambda x: lr1[x])
-    #if ms > 0:
-        #if lr2i not in lrid2cluster:
-            #lrid2cluster[lr1i] = clnr
-            #lrid2cluster[lr2i] = clnr
-            #clnr += 1
-            #clusters[clnr].append(lr1i)
-            #clusters[clnr].append(lr2i)
-        #else:
-            #lrid2cluster[lr1i] = lrid2cluster[lr2i]
-            #clusters[lrid2cluster[lr2i]].append(lr1i)
-    ##print("\t".join([lr1i, lr2, str(ms)]))
-    ##print(lr1)
-#creads = []
-#for nr,cluster in clusters.items():
-    #origin = sample(cluster,1)[0]
-    #for read in cluster:
-        #if lr_dists[read][origin] > 0:
-            #origin = read
-    #creads.append(deque(sorted(cluster, key=lambda x: lr_dists[origin][x])))
-    
+# greedyly expand component with best matching thing
 gr = nx.DiGraph()
 for lr1i, lr1 in lr_scores.items():
     if lr1i not in gr.nodes():
@@ -156,6 +129,7 @@ for lr1i, lr1 in lr_scores.items():
     gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
 
 
+# order components
 creads = []
 for component in list(nx.connected_components((gr.to_undirected()))):
     # get all distances from random anchor node
