@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import sys
 from itertools import combinations
-from scaffold import Scaffolds
+from scaffold import Longreads 
 
 
 parser = ArgumentParser()
@@ -38,7 +38,7 @@ if args.blacklistfile:
             else:
                 blacklist[sline[0]] = sline[1]
 
-lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
+lrs = Longreads(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(2)
 lrs.turn_longreads_around()
 lrs.sort_contigs_in_reads()

@@ -9,7 +9,7 @@ import pickle
 from itertools import combinations, product
 from statistics import median, mean
 from Bio import SeqIO
-from scaffold import Scaffolds
+from scaffold import Longreads
 
 
 parser = ArgumentParser()
@@ -36,7 +36,7 @@ if args.blacklistfile:
                 blacklist[sline[0]].append(sline[1])
 
 
-lrs = Scaffolds(args.inputfiles, blacklist, args.linename)
+lrs = Longreads(args.inputfiles, blacklist, args.linename)
 lrs.filter_contigcounts(2)
 lrs.filter_small_contigs(300)
 #lrs.filter_reverse_small_contigs(600)
