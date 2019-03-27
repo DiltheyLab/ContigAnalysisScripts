@@ -2,6 +2,7 @@ from itertools import combinations, cycle, product
 from collections import defaultdict, Counter, deque
 from statistics import mean
 import svgwrite
+from svgwrite.container import Group
 import sys
 
 def shortname(ctgname):
@@ -20,7 +21,7 @@ def sniff_format(fileh):
         return "erate"
         
 
-class Scaffolds:
+class Longreads:
     lreads = {}
     cellline = ""
     ctg2lreads = defaultdict(set)
@@ -29,6 +30,7 @@ class Scaffolds:
     def __str__(self):
         out = ""
         for lread in self.lreads.values():
+            #out += str(lread)
             out += "Length: " + str(lread["length"]) + "\n"
             for mapper in lread["maps"]:
                 out += "\t" + str(mapper) + "\n"
@@ -88,6 +90,33 @@ class Scaffolds:
                         self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["rm_ecr"] = int(ecr)
                         self.lreads[rid]["lm_scr"] = int(scr)
+
+    @classmethod
+    def init_from_dict(cls, lrdict, line, contig_lengths, lrids = None):
+        newinst = cls([],None,line)
+        newinst.cellline = line
+        newinst.lrids = lrids
+        newinst.contig_lengths = contig_lengths
+        newinst.lreads = defaultdict(dict)
+        for rid, longread in lrdict.items():
+            newinst.lreads[rid]["rm_ecr"] = None
+            newinst.lreads[rid]["lm_scr"] = None
+            newinst.lreads[rid]["ctgset"] = set()
+            newinst.lreads[rid]["maps"] = []
+            newinst.lreads[rid]["mapsc"] = defaultdict(list)
+            for contig in lrdict[rid]["maps"]:
+                ctgn = contig["name"]
+                newinst.ctg2lreads[ctgn].add(rid)
+                newinst.lreads[rid]["ctgset"].add(ctgn)
+                newinst.lreads[rid]["mapsc"][ctgn].append(contig)
+                newinst.lreads[rid]["maps"].append(contig)
+                if (not newinst.lreads[rid]["lm_scr"]) or contig["scr"] < newinst.lreads[rid]["lm_scr"]:
+                    newinst.lreads[rid]["lm_scr"] = contig["scr"]
+                if (not newinst.lreads[rid]["rm_ecr"]) or contig["ecr"] > newinst.lreads[rid]["rm_ecr"]:
+                    newinst.lreads[rid]["rm_ecr"] = contig["ecr"]
+            newinst.lreads[rid]["length"] = newinst.lreads[rid]["rm_ecr"]
+            
+        return newinst
 
     def filter_whitelist_ctgs(self, whitelist_ctgs):
         for rid in list(self.lreads.keys()):
@@ -261,6 +290,88 @@ class Scaffolds:
             return roffs
 
 
+    # Returns the space in y that it needs, depends on the number of longreads that this object contains
+    def to_SVG(self, img, lread_ids, ctglengths, xoff, yoff, zoom=100, ctg_y_drawsize=12, show_lr_ids=False):
+        ypad = 7
+        xpad = 20
+        col = "black"
+        nr_longreads = len(self.lreads)
+        ypos = yoff
+        # TODO reimplement
+        #if show_lr_ids:
+            #for lrid, lrc in self.longread_coords.items():
+                #ylen = nr_longreads * y_space_per_lr - ypos
+                #rect = img.add(svgwrite.shapes.Rect((xoff+(lrc[0]/100),yoff+ypos), ((lrc[1]-lrc[0])/100,ylen+ypad), stroke='green', stroke_width=1 ))
+                #rect.fill(color="none").dasharray([2, 2])
+                #img.add(img.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
+                #ypos += y_space_per_lr
+        ypos += ypad
+        ctg_y_halfdrawsize = ctg_y_drawsize/2
+        ctg_relative_positions = cycle([-ctg_y_halfdrawsize-2, ctg_y_halfdrawsize+4, -ctg_y_halfdrawsize-5, ctg_y_halfdrawsize+7])
+        gradient_idc = 0
+
+        def get_colors_from_nr(nr):
+            col1 = "#000000"
+            col2 = "#000000"
+            if nr==0 or nr==1:
+                col1 = "#FF0000"
+                col2 = "#0000FF"
+            elif nr==2 or nr==3:
+                col1 = "#FFE119"
+                col2 = "#000000"
+            elif nr==4 or nr==5:
+                col1 = "#911eb4"
+                col2 = "#a9a9a9"
+            elif nr==6 or nr==7:
+                col1 = "#000075"
+                col2 = "#f58231"
+            elif nr==8 or nr==9:
+                col1 = "#e6beff"
+                col2 = "#808000"
+            return [col1, col2]
+
+
+        def get_colors(ctgn):
+            col1, col2 = get_colors_from_nr(int(ctgn.rstrip(self.cellline)[-1]))
+            total = 0
+            return [col1, col2]
+
+        for lrid in lread_ids:
+            lread = self.lreads[lrid]
+            g = img.defs.add(Group(id=lrid))
+            g.add(svgwrite.shapes.Line((xoff, ypos), ( xoff + lread["length"]/zoom, ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
+            for contig in sorted(lread["maps"], key= lambda x: x["scr"]):
+                #print(read)
+                sc = contig["scr"]
+                ec = contig["ecr"]
+                scc = contig["scc"]
+                ecc = contig["ecc"]
+                ctgn = contig["name"]
+                #ctg = read[0]
+                if ctgn.startswith("chr"):
+                    ctgnd = ctgn[0:9]
+                else:
+                    ctgnd = "$" + ctgn + "q"
+
+                gradient_idc += 1
+                gradient_id1 = str(gradient_idc)
+                lineargrad1 = img.defs.add(svgwrite.gradients.LinearGradient(id=gradient_id1 , x1=-scc/(ecc-scc), x2=1+(ctglengths[shortname(ctgn)]-ecc)/(ecc-scc), y1=0, y2=0))
+                col1, col2 = get_colors(shortname(ctgn))
+                
+                lineargrad1.add_stop_color("0%",col1)
+                lineargrad1.add_stop_color("50%","#FFFFFF")
+                lineargrad1.add_stop_color("100%",col2)
+
+                g.add(svgwrite.shapes.Rect((xoff+sc/zoom,ypos-ctg_y_halfdrawsize), ((ec-sc)/zoom,ctg_y_drawsize), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
+                yt = ypos + next(ctg_relative_positions)
+                g.add(img.text(ctgnd, insert=(xoff+(sc/zoom),yt),fill=col, style="font-size:3"))
+                if contig["strand"] == 0:
+                    direction = ">"
+                else:
+                    direction = "<"
+                g.add(img.text(direction, insert=(xoff+sc/zoom,ypos+2),style="font-size:6"))
+            img.add(g)
+        return ypos+7
 
     
     def pseudoalign_all(self, debug=False):
@@ -1395,8 +1506,6 @@ class Scaffold2:
                     self.lreads[rid]["lm_scr"] = int(scr)
 
 
-            
-        
 
     # Returns the space in y that it needs (depends on the number of longreads that were merged into this scaffold)
     def to_SVG(self, img, contigs, xoff, yoff):
@@ -1516,3 +1625,71 @@ class Scaffold2:
             img.add(img.text(direction, insert=(xoff+sc/100,yoff+ypos+2),fill = col, style="font-size:6"))
         return ypos+7
 
+
+class LongReadSVG:
+
+    def __init__(self, filehandle, zoom=100,shortread_info=False):
+        dwg = svgwrite.Drawing(filehandle, size=(u'1700', u'2200'), profile='full')
+
+        mask1 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask1"))
+        #mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+        mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1"))
+        mask2 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask2"))
+        mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
+        mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0"))
+           
+        #svgwrite.gradients.LinearGradient((0,0), (100,0))
+        yp = 10
+        self.xtext = 10
+        xpad = 20
+        self.xpad = xpad
+        dwg.add(dwg.text("600 bases", insert=(self.xpad, yp), fill='black', style="font-size:7"))
+        yp += 5 
+        dwg.add(dwg.line((self.xpad, yp), ( xpad + 600/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        dwg.add(dwg.line((xpad + 600/zoom, yp-2), ( xpad +600/zoom, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        yp += 10
+        dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+        yp += 5
+        dwg.add(dwg.line((xpad, yp), ( xpad + 10000/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        for i in range(1,10):
+            dwg.add(dwg.line( (xpad + (10000/zoom)/10 * i, yp-1), (xpad + (10000/zoom)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
+        dwg.add(dwg.line((xpad + 10000/zoom, yp-2), ( xpad +10000/zoom, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        yp += 10
+        dwg.add(dwg.text("100k bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+        yp += 5
+        dwg.add(dwg.line((xpad, yp), ( xpad + 100000/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        for i in range(1,10):
+            dwg.add(dwg.line( (xpad + (100000/zoom)/10 * i, yp-1), (xpad + (100000/zoom)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
+        dwg.add(dwg.line((xpad + 100000/zoom, yp-2), ( xpad +100000/zoom, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
+        yp += 10
+        g1M = dwg.defs.add(dwg.g(id='g003'))
+        g1M.add(dwg.text("M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
+        yp += 5
+        g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
+        g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
+        for i in range(0,31):
+            if i%10 == 0:
+                g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-7), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
+            else:
+                g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-5), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
+        g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        dwg.add(g1M)
+        #yp += 20
+        #rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/zoom,7), stroke='green', stroke_width=1 ))
+        #rect.fill(color="none").dasharray([2, 2])
+        #dwg.add(dwg.text("region of scaffold covered by long read", insert=( xpad+ 2000/zoom+ 5, yp+2), fill='black', style="font-size:7"))
+        yp += 10
+        if shortread_info:
+            dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/zoom,7), stroke='gray', stroke_width=1, fill='none' ))
+            dwg.add(dwg.text("contigs from short read data", insert=( xpad+ 2000/zoom + 5, yp+2), fill='black', style="font-size:7"))
+            yp += 10
+        dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/zoom,7), stroke='black', stroke_width=1, fill='none' ))
+        dwg.add(dwg.text("contigs from long read data", insert=( xpad+ 2000/zoom + 5, yp+2), fill='black', style="font-size:7"))
+        yp += 20
+        self.yp = yp
+        self.dwg = dwg
