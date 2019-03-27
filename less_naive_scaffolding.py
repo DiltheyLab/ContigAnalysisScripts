@@ -11,8 +11,9 @@ from itertools import combinations, cycle, product
 from collections import defaultdict, deque
 import svgwrite
 import squarify
-from scaffold import Scaffold, Scaffolds, Scaffold2
+from scaffold import Scaffold, Longreads, LongReadSVG
 import networkx as nx
+from statistics import mean
 
 parser = ArgumentParser()
 parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format", nargs="+")
@@ -138,7 +139,7 @@ def shortname(ctgname):
 
 print("Nr. of scaffolds: " + str(len(contigs)))
 
-scafs = Scaffolds(args.inputfiles, blacklist, args.linename)
+scafs = Longreads(args.inputfiles, blacklist, args.linename)
 scafs.filter_contigcounts(args.mincontigs)
 scafs.filter_whitelist_ctgs(set(["100APD", "330APD"]))
 scafs.filter_small_contigs(300)
@@ -165,6 +166,7 @@ for lr1i, lr1 in lr_scores.items():
     gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
     gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
 
+    
 
 # order components
 creads = []
@@ -194,111 +196,111 @@ for component in list(nx.connected_components((gr.to_undirected()))):
     creads.append(deque(sorted(component, key=lambda x: gr[minnode][x]["dist"])))
     #print(g[minnode])
 
-# merge reads
+# poor man's kmeans clustering
+def split_distances(distances, tolerance):
+    clusters = []
+    indices = []
+    for didx, dist in enumerate(distances):
+        for cidx, cluster in enumerate(clusters):
+            if abs(mean(cluster)-dist) < tolerance:
+                cluster.append(dist)
+                indices[cidx].append(didx)
+                break
+        else:
+            clusters.append([dist])
+            indices.append([didx])
+    return (indices, clusters)
+
+
+print("Nr of clusters: " + str(len(creads)))
+# merge reads 
+pseudolongreads = dict()
+plr_nr = 1
 for cluster in creads:
     print("Length of cluster: " + str(len(cluster)))
-    # build average boi
-    clusterboi = Scaffold2(cluster, scafs.lreads, gr)
-sys.exit()
+    # perform Pseudo MSA and get consensus
+    print("Getting Pseudo-Longread for cluster... ")
+    pseudo_read_name = "pseudo_lr_" + str(plr_nr)
+    plr_nr += 1
+    pseudolongreads[pseudo_read_name] = dict()
+    p = pseudolongreads[pseudo_read_name]
+    p["lrids"] = cluster
+    p["maps"] = []
+    
+    # build average boi ###### replace #####
+    #clusterboi = Scaffold2(cluster, scafs.lreads, gr)
+    # build average boi ###### replace #####
+
+    #kk.build new dictI
+    origin = cluster[0]
+
+    # pseudo MSA with consensus
+    vstarts = defaultdict(list)
+    ctgs = defaultdict(list)
+    for lrid in cluster:
+        lr = scafs.lreads[lrid]
+        for contig in lr["maps"]:
+            vstarts[contig["name"]].append(gr[origin][lrid]["dist"] + contig["scr"] - contig["scc"])
+            ctgs[contig["name"]].append(contig)
+
+    #print(vstarts)
+    for ctgn, ctgdists in vstarts.items():
+        indices, clustered_dists = split_distances(ctgdists, 600)
+        #print(indices)
+        for clusteridx, cluster in enumerate(clustered_dists):
+            sccs = []
+            eccs = []
+            strands = []
+            for ctgidx in indices[clusteridx]:
+                sccs.append(ctgs[ctgn][ctgidx]["scc"])
+                eccs.append(ctgs[ctgn][ctgidx]["ecc"])
+                strands.append(ctgs[ctgn][ctgidx]["strand"])
+            newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":min(sccs), "ecc":max(eccs), "scr":round(mean(cluster)) + min(sccs), "ecr":round(mean(cluster))+ max(eccs)}
+            p["maps"].append(newctg)
+
+#print(pseudolongreads.keys())
+
+#Longreads        
+scafs2 = Longreads.init_from_dict(pseudolongreads, scafs.cellline, contigs, scafs.lreads)
+#print(scafs2)
 
 
 #scaffolds = {}
 #for rid in scafs.lreads:
     #nscaff = Scaffold.init_from_LR((rid,scafs.lreads[rid]),args.linename, allcontigs )
-for scafid, scaf in scaffolds.items():
-    for ctg in scaf.contigset:
-        if ctg.endswith(args.linename):
-            contig2scaffold[ctg].append(id(scaf))
-        
-    #nscaff.get_sequence_th()
-    #nscaff.add_seq_info()
-    #scaffolds[id(nscaff)] = nscaff
-
-
-toRemove = set()
-for idx,scaf in scaffolds.items():
-    #find and get rid of conflicting scaffolds
-    #if scaf.find_conflicts():
-    #    toRemove.add(idx)
-    octgs = scaf.remove_overlapped_contigs(allcontigs)
-    sctgs = scaf.remove_short_contigs(allcontigs)
-    for ctg in octgs | sctgs:
-        contig2scaffold[ctg].remove(idx)
-    if len(scaf.contigset) == 0:
-        toRemove.add(idx)
-        
+#for scafid, scaf in scaffolds.items():
+    #for ctg in scaf.contigset:
+        #if ctg.endswith(args.linename):
+            #contig2scaffold[ctg].append(id(scaf))
+        #
+    ##nscaff.get_sequence_th()
+    ##nscaff.add_seq_info()
+    ##scaffolds[id(nscaff)] = nscaff
+#
+#
+#toRemove = set()
+#for idx,scaf in scaffolds.items():
+    ##find and get rid of conflicting scaffolds
+    ##if scaf.find_conflicts():
+    ##    toRemove.add(idx)
+    #octgs = scaf.remove_overlapped_contigs(allcontigs)
+    #sctgs = scaf.remove_short_contigs(allcontigs)
+    #for ctg in octgs | sctgs:
+        #contig2scaffold[ctg].remove(idx)
+    #if len(scaf.contigset) == 0:
+        #toRemove.add(idx)
+        #
+    #
+#for idx in toRemove:
+    #del(scaffolds[idx])
     
-for idx in toRemove:
-    del(scaffolds[idx])
-    
 
+image = LongReadSVG(args.SVG, zoom=100)
+dwg = image.dwg
+scafs2.to_SVG(dwg, scafs2.lreads.keys(), contigs, 30, image.yp, zoom=100)
+dwg.save()
 
-
-dwg = svgwrite.Drawing(args.SVG,size=(u'1700', u'2200'), profile='full')
-
-lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
-lineargrad.add_stop_color(0,"#FF0000")
-lineargrad.add_stop_color(50,"#FFFFFF")
-lineargrad.add_stop_color(100,"#0000FF")
-mask1 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask1"))
-#mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1"))
-mask2 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask2"))
-mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0"))
-   
-#svgwrite.gradients.LinearGradient((0,0), (100,0))
-yp = 10
-xtext = 10
-xpad = 20
-dwg.add(dwg.text("600 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 5 
-dwg.add(dwg.line((xpad, yp), ( xpad + 600/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad + 600/100, yp-2), ( xpad +600/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-yp += 10
-dwg.add(dwg.text("10000 bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 5
-dwg.add(dwg.line((xpad, yp), ( xpad + 10000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-for i in range(1,10):
-    dwg.add(dwg.line( (xpad + (10000/100)/10 * i, yp-1), (xpad + (10000/100)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
-dwg.add(dwg.line((xpad + 10000/100, yp-2), ( xpad +10000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-yp += 10
-dwg.add(dwg.text("100k bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 5
-dwg.add(dwg.line((xpad, yp), ( xpad + 100000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%')))
-dwg.add(dwg.line((xpad, yp-2), ( xpad , yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-for i in range(1,10):
-    dwg.add(dwg.line( (xpad + (100000/100)/10 * i, yp-1), (xpad + (100000/100)/10 * i, yp+1), stroke=svgwrite.rgb(0,0,0,'%')))
-dwg.add(dwg.line((xpad + 100000/100, yp-2), ( xpad +100000/100, yp+2), stroke=svgwrite.rgb(0, 0, 0, '%')))
-yp += 10
-g1M = dwg.defs.add(dwg.g(id='g003'))
-g1M.add(dwg.text("M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
-yp += 5
-g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/100, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
-g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
-for i in range(0,31):
-    if i%10 == 0:
-        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-7), (xpad + (1000000/100)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
-    else:
-        g1M.add(dwg.line( (xpad + (1000000/100)/10 * i, yp-5), (xpad + (1000000/100)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
-g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/100-10, yp-10), fill='black', style="font-size:10"))
-g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/100-10, yp-10), fill='black', style="font-size:10"))
-g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/100-10, yp-10), fill='black', style="font-size:10"))
-dwg.add(g1M)
-yp += 20
-rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='green', stroke_width=1 ))
-rect.fill(color="none").dasharray([2, 2])
-dwg.add(dwg.text("region of scaffold covered by long read", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
-yp += 10
-if args.summaryfile:
-    dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='gray', stroke_width=1, fill='none' ))
-    dwg.add(dwg.text("contigs from short read data", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
-    yp += 10
-dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/100,7), stroke='black', stroke_width=1, fill='none' ))
-dwg.add(dwg.text("contigs from long read data", insert=( xpad+ 2000/100 + 5, yp+2), fill='black', style="font-size:7"))
-yp += 20
+sys.exit()
 
 # cluster np-reads 
 print("scaffolding long reads ....")
