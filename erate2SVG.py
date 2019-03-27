@@ -7,7 +7,7 @@ from random import sample
 from svgwrite.container import Group
 from Bio import SeqIO
 from collections import defaultdict, deque
-from scaffold import Scaffold, Scaffolds
+from scaffold import Scaffold, Longreads, LongReadSVG
 import networkx as nx
 
 
@@ -53,7 +53,7 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = len(read.seq)
 
 
-scafs = Scaffolds(args.inputfiles, blacklist, args.linename, whitelist_lreads)
+scafs = Longreads(args.inputfiles, blacklist, args.linename, whitelist_lreads)
 if whitelist_ctgs:
     scafs.filter_whitelist_ctgs(whitelist_ctgs)
 scafs.filter_contigcounts(args.mincontigs)
@@ -202,19 +202,8 @@ xtext = 10
 xpad = 200
 ypad = 10
 
-dwg = svgwrite.Drawing(args.output, size=(u'4000', u'10000'), profile='full')
-lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
-lineargrad.add_stop_color("0%","#FF0000")
-lineargrad.add_stop_color("50%","#FFFFFF")
-lineargrad.add_stop_color("100%","#0000FF")
-#mask1 = dwg.defs.add(svgwrite.masking.Mask(maskContentUnits = 'objectBoundingBox', id="mask1"))
-#mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-#mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1", fill="white"))
-#mask2 = dwg.defs.add(svgwrite.masking.Mask(maskContentUnits = 'objectBoundingBox', id="mask2"))
-#mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-#mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0", fill="white"))
-
-
+image = LongReadSVG(args.output, zoom=100)
+dwg = image.dwg
 
 def shortname(ctgname):
     if "_" in ctgname:
@@ -226,6 +215,8 @@ csize = 0
 sorted_clusters = creads
 
 gradient_idc = 0
+
+ypos += 200
 for cluster in sorted_clusters:
     for rid in cluster:
         if args.alignreads:
