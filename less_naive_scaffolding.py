@@ -59,7 +59,7 @@ if args.blacklistfile:
         for line in f:
             sline = line.split()
             if sline[0] == "contig":
-                blacklist[sline[1]] = "y"
+                blacklist[sline[1]] = float(sline[2])
             else:
                 blacklist[sline[0]].append(sline[1])
 #print(blacklist)
@@ -124,77 +124,56 @@ def shortname(ctgname):
     else:
         return ctgname
 
-# some custom additions
-#add_neighs("224APD","976APD","right",round(16.67))
-#add_neighs("916APD","1247APD","right",round(116.8))
-#add_neighs("2406APD","1671APD","right",round(52.3))
-#add_neighs("105APD","726APD","right",round(-40.1))
-#add_neighs("726APD","1674APD","right",round(304.0))
-#add_neighs("2080APD","2377APD","right",round(361.9))
-#add_neighs("2377APD","928APD","right",round(75.6))
-#add_neighs("504APD", "49APD","right",round(-460.3))
-#add_neighs("49APD","116APD","right",round(-4.8))
-#srneighs["504APD"]["right"] = []
 
 
-print("Nr. of scaffolds: " + str(len(contigs)))
-
-scafs = Longreads(args.inputfiles, blacklist, args.linename)
-scafs.filter_contigcounts(args.mincontigs)
-scafs.filter_whitelist_ctgs(set(["100APD", "330APD"]))
-scafs.filter_small_contigs(300)
-scafs.filter_reverse_small_contigs(600)
-scafs.turn_longreads_around()
-scafs.sort_by_starts()
-
-print("Pseudoaligning all...")
-lr_scores, lr_dists = scafs.pseudoalign_all()
-print("Pseudoaligning finished")
+print("Nr. of Contigs: " + str(len(contigs)))
 
 
-# greedyly expand components with best matching thing
-gr = nx.DiGraph()
-for lr1i, lr1 in lr_scores.items():
-    if lr1i not in gr.nodes():
-        gr.add_node(lr1i)
-    ms = max(lr1.values())
-    lr2i = max(lr1.keys(), key=lambda x: lr1[x])
-    if lr2i not in gr.nodes():
-        gr.add_node(lr2i)
-    #print(lr2i)
-    #print(lr_dists[lr1i][lr2i])
-    gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
-    gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
 
-    
+def cluster(scores, dists):
+    # greedyly expand components with best matching thing
+    gr = nx.DiGraph()
+    for lr1i, lr1 in scores.items():
+        if lr1i not in gr.nodes():
+            gr.add_node(lr1i)
+        ms = max(lr1.values())
+        lr2i = max(lr1.keys(), key=lambda x: lr1[x])
+        if lr2i not in gr.nodes():
+            gr.add_node(lr2i)
+        #print(lr2i)
+        #print(dists[lr1i][lr2i])
+        gr.add_edge(lr1i,lr2i,dist=dists[lr1i][lr2i])
+        gr.add_edge(lr2i,lr1i,dist=dists[lr2i][lr1i])
 
-# order components
-creads = []
-for component in list(nx.connected_components((gr.to_undirected()))):
-    # get all distances from random anchor node
-    anchor = random.sample(component,1)[0]
-    worklist = deque([anchor])
-    ns = gr.neighbors(anchor)
-    for n in ns:
-        worklist.append(n)
-    while worklist:
-        #print("worklist: " + str(len(worklist)))
-        cn = worklist.popleft()
-        ns = nx.neighbors(gr,cn)
-        #print("ns: " + str(len(ns)))
+    # order components
+    creads = []
+    for component in list(nx.connected_components((gr.to_undirected()))):
+        # get all distances from random anchor node
+        anchor = random.sample(component,1)[0]
+        worklist = deque([anchor])
+        ns = gr.neighbors(anchor)
         for n in ns:
-            if (anchor, n) not in gr.edges():
-                gr.add_edge(anchor,n, dist=gr[anchor][cn]["dist"] + gr[cn][n]["dist"])
-                gr.add_edge(n, anchor, dist= - gr[anchor][cn]["dist"] - gr[cn][n]["dist"])
-                worklist.append(n)
-    # now get all distances from the leftmost node
-    minnode = min(gr[anchor], key = lambda x: gr[anchor][x]["dist"])
-    for node in set(component):
-        gr.add_edge(minnode, node, dist = gr[minnode][anchor]["dist"] + gr[anchor][node]["dist"])
-        gr.add_edge(node, minnode, dist = -gr[minnode][anchor]["dist"] - gr[anchor][node]["dist"])
-    # put this in data structure that's used by the plotting, update lr_dists
-    creads.append(deque(sorted(component, key=lambda x: gr[minnode][x]["dist"])))
-    #print(g[minnode])
+            worklist.append(n)
+        while worklist:
+            #print("worklist: " + str(len(worklist)))
+            cn = worklist.popleft()
+            ns = nx.neighbors(gr,cn)
+            #print("ns: " + str(len(ns)))
+            for n in ns:
+                if (anchor, n) not in gr.edges():
+                    gr.add_edge(anchor,n, dist=gr[anchor][cn]["dist"] + gr[cn][n]["dist"])
+                    gr.add_edge(n, anchor, dist= - gr[anchor][cn]["dist"] - gr[cn][n]["dist"])
+                    worklist.append(n)
+        # now get all distances from the leftmost node
+        minnode = min(gr[anchor], key = lambda x: gr[anchor][x]["dist"])
+        for node in set(component):
+            gr.add_edge(minnode, node, dist = gr[minnode][anchor]["dist"] + gr[anchor][node]["dist"])
+            gr.add_edge(node, minnode, dist = -gr[minnode][anchor]["dist"] - gr[anchor][node]["dist"])
+        # put this in data structure that's used by the plotting, update dists
+        creads.append(deque(sorted(component, key=lambda x: gr[minnode][x]["dist"])))
+        #print(g[minnode])
+    return [creads, gr]
+
 
 # poor man's kmeans clustering
 def split_distances(distances, tolerance):
@@ -211,93 +190,72 @@ def split_distances(distances, tolerance):
             indices.append([didx])
     return (indices, clusters)
 
+def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
+    # merge reads 
+    pseudolongreads = dict()
+    plr_nr = 1
+    for cluster in clustered_reads:
+        if len(cluster) < minlength:
+            continue
+        # perform Pseudo MSA and get consensus
+        #print("Getting Pseudo-Longread for cluster...  (length: " + str(len(cluster)) + ")")
+        pseudo_read_name = "pseudo_lr_" + str(plr_nr)
+        plr_nr += 1
+        pseudolongreads[pseudo_read_name] = dict()
+        p = pseudolongreads[pseudo_read_name]
+        p["lrids"] = cluster
+        p["maps"] = []
+        
+        origin = cluster[0]
 
-print("Nr of clusters: " + str(len(creads)))
-# merge reads 
-pseudolongreads = dict()
-plr_nr = 1
-for cluster in creads:
-    print("Length of cluster: " + str(len(cluster)))
-    # perform Pseudo MSA and get consensus
-    print("Getting Pseudo-Longread for cluster... ")
-    pseudo_read_name = "pseudo_lr_" + str(plr_nr)
-    plr_nr += 1
-    pseudolongreads[pseudo_read_name] = dict()
-    p = pseudolongreads[pseudo_read_name]
-    p["lrids"] = cluster
-    p["maps"] = []
-    
-    # build average boi ###### replace #####
-    #clusterboi = Scaffold2(cluster, scafs.lreads, gr)
-    # build average boi ###### replace #####
+        # pseudo MSA with consensus
+        vstarts = defaultdict(list)
+        ctgs = defaultdict(list)
+        for lrid in cluster:
+            lr = longreads.lreads[lrid]
+            for contig in lr["maps"]:
+                vstarts[contig["name"]].append(distance_graph[origin][lrid]["dist"] + contig["scr"] - contig["scc"])
+                ctgs[contig["name"]].append(contig)
 
-    #kk.build new dictI
-    origin = cluster[0]
+        for ctgn, ctgdists in vstarts.items():
+            indices, clustered_dists = split_distances(ctgdists, 1000)
+            #print(indices)
+            for clusteridx, cluster in enumerate(clustered_dists):
+                sccs = []
+                eccs = []
+                strands = []
+                for ctgidx in indices[clusteridx]:
+                    sccs.append(ctgs[ctgn][ctgidx]["scc"])
+                    eccs.append(ctgs[ctgn][ctgidx]["ecc"])
+                    strands.append(ctgs[ctgn][ctgidx]["strand"])
+                newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":min(sccs), "ecc":max(eccs), "scr":round(mean(cluster)) + min(sccs), "ecr":round(mean(cluster))+ max(eccs)}
+                p["maps"].append(newctg)
+    return pseudolongreads
 
-    # pseudo MSA with consensus
-    vstarts = defaultdict(list)
-    ctgs = defaultdict(list)
-    for lrid in cluster:
-        lr = scafs.lreads[lrid]
-        for contig in lr["maps"]:
-            vstarts[contig["name"]].append(gr[origin][lrid]["dist"] + contig["scr"] - contig["scc"])
-            ctgs[contig["name"]].append(contig)
+scafs = Longreads(args.inputfiles, blacklist, args.linename)
+scafs.filter_contigcounts(args.mincontigs)
+#scafs.filter_whitelist_ctgs(set(["259APD"]))
+scafs.filter_small_contigs(300)
+scafs.filter_reverse_small_contigs(600)
+scafs.turn_longreads_around()
+scafs.sort_by_starts()
 
-    #print(vstarts)
-    for ctgn, ctgdists in vstarts.items():
-        indices, clustered_dists = split_distances(ctgdists, 600)
-        #print(indices)
-        for clusteridx, cluster in enumerate(clustered_dists):
-            sccs = []
-            eccs = []
-            strands = []
-            for ctgidx in indices[clusteridx]:
-                sccs.append(ctgs[ctgn][ctgidx]["scc"])
-                eccs.append(ctgs[ctgn][ctgidx]["ecc"])
-                strands.append(ctgs[ctgn][ctgidx]["strand"])
-            newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":min(sccs), "ecc":max(eccs), "scr":round(mean(cluster)) + min(sccs), "ecr":round(mean(cluster))+ max(eccs)}
-            p["maps"].append(newctg)
-
-#print(pseudolongreads.keys())
-
-#Longreads        
-scafs2 = Longreads.init_from_dict(pseudolongreads, scafs.cellline, contigs, scafs.lreads)
-#print(scafs2)
+for iteration in range(10):
+    print("Pseudoaligning all... ", end="")
+    lr_scores, lr_dists = scafs.pseudoalign_all()
+    print("finished.")
+    creads, gr = cluster(lr_scores, lr_dists)
+    print("Nr. of clusters: " + str(len(creads)))
+    if iteration == 0:
+        ps = merge_clusters(scafs, creads, gr, 2)
+    else:
+        ps = merge_clusters(scafs, creads, gr, 1)
+    scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
 
 
-#scaffolds = {}
-#for rid in scafs.lreads:
-    #nscaff = Scaffold.init_from_LR((rid,scafs.lreads[rid]),args.linename, allcontigs )
-#for scafid, scaf in scaffolds.items():
-    #for ctg in scaf.contigset:
-        #if ctg.endswith(args.linename):
-            #contig2scaffold[ctg].append(id(scaf))
-        #
-    ##nscaff.get_sequence_th()
-    ##nscaff.add_seq_info()
-    ##scaffolds[id(nscaff)] = nscaff
-#
-#
-#toRemove = set()
-#for idx,scaf in scaffolds.items():
-    ##find and get rid of conflicting scaffolds
-    ##if scaf.find_conflicts():
-    ##    toRemove.add(idx)
-    #octgs = scaf.remove_overlapped_contigs(allcontigs)
-    #sctgs = scaf.remove_short_contigs(allcontigs)
-    #for ctg in octgs | sctgs:
-        #contig2scaffold[ctg].remove(idx)
-    #if len(scaf.contigset) == 0:
-        #toRemove.add(idx)
-        #
-    #
-#for idx in toRemove:
-    #del(scaffolds[idx])
-    
-
-image = LongReadSVG(args.SVG, zoom=100)
+image = LongReadSVG(args.SVG, zoom=200)
 dwg = image.dwg
-scafs2.to_SVG(dwg, scafs2.lreads.keys(), contigs, 30, image.yp, zoom=100)
+scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=200)
 dwg.save()
 
 sys.exit()
