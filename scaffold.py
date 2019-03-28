@@ -69,7 +69,8 @@ class Longreads:
                             elif ctg in blacklist[rid]:
                                 continue
                         if shortname(ctg) in blacklist:
-                            continue
+                            if (int(ecc)-int(scc))/int(lenc) < blacklist[ctg]:
+                                continue
                     self.ctg2lreads[ctg].add(rid)
                     if rid in self.lreads:
                         self.lreads[rid]["ctgset"].add(ctg)
@@ -264,7 +265,7 @@ class Longreads:
                 if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
                    continue
                 else:
-                    overall_score -= 2*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+                    overall_score -= 5*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
         return overall_score
 
     def get_possible_offsets(self, lr1, lr2):
@@ -371,7 +372,8 @@ class Longreads:
                     direction = "<"
                 g.add(img.text(direction, insert=(xoff+sc/zoom,ypos+2),style="font-size:6"))
             img.add(g)
-        return ypos+7
+            ypos += 35 
+        return ypos-yoff
 
     
     def pseudoalign_all(self, debug=False):
