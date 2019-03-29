@@ -64,7 +64,6 @@ if args.blacklistfile:
                 blacklist[sline[0]].append(sline[1])
 #print(blacklist)
 
-
 def get_other_relpos(relpos):
     if relpos == "left":
         return "right"
@@ -142,13 +141,17 @@ def cluster(scores, dists):
             gr.add_node(lr2i)
         #print(lr2i)
         #print(dists[lr1i][lr2i])
-        gr.add_edge(lr1i,lr2i,dist=dists[lr1i][lr2i])
-        gr.add_edge(lr2i,lr1i,dist=dists[lr2i][lr1i])
+        if dists[lr1i][lr2i] is not None: # could be None if score was 0
+            gr.add_edge(lr1i,lr2i,dist=dists[lr1i][lr2i])
+            gr.add_edge(lr2i,lr1i,dist=dists[lr2i][lr1i])
 
     # order components
     creads = []
     for component in list(nx.connected_components((gr.to_undirected()))):
         # get all distances from random anchor node
+        if len(component) == 1:
+            creads.append(deque(component))
+            continue
         anchor = random.sample(component,1)[0]
         worklist = deque([anchor])
         ns = gr.neighbors(anchor)
@@ -205,6 +208,11 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
         p = pseudolongreads[pseudo_read_name]
         p["lrids"] = cluster
         p["maps"] = []
+
+        if len(cluster) == 1:
+            p["maps"] = longreads.lreads[cluster[0]]["maps"].copy()
+            #p["length"] = longreads.lreads[cluster[0]]["maps"].copy()
+            continue
         
         origin = cluster[0]
 
@@ -218,7 +226,7 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
                 ctgs[contig["name"]].append(contig)
 
         for ctgn, ctgdists in vstarts.items():
-            indices, clustered_dists = split_distances(ctgdists, 1000)
+            indices, clustered_dists = split_distances(ctgdists, 2000)
             #print(indices)
             for clusteridx, cluster in enumerate(clustered_dists):
                 sccs = []
@@ -234,24 +242,31 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
 
 scafs = Longreads(args.inputfiles, blacklist, args.linename)
 scafs.filter_contigcounts(args.mincontigs)
-#scafs.filter_whitelist_ctgs(set(["259APD"]))
+#scafs.filter_whitelist_ctgs(set(["1115APD"]))
 scafs.filter_small_contigs(300)
 scafs.filter_reverse_small_contigs(600)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
 
+print("Nr. of reads: " + str(len(scafs.lreads)))
+
+
 for iteration in range(10):
     print("Pseudoaligning all... ", end="")
-    lr_scores, lr_dists = scafs.pseudoalign_all()
-    print("finished.")
-    creads, gr = cluster(lr_scores, lr_dists)
-    print("Nr. of clusters: " + str(len(creads)))
-    if iteration == 0:
-        ps = merge_clusters(scafs, creads, gr, 2)
+    if iteration == 19:
+        lr_scores, lr_dists = scafs.pseudoalign_all(True)
     else:
-        ps = merge_clusters(scafs, creads, gr, 1)
+        lr_scores, lr_dists = scafs.pseudoalign_all()
+    print("finished.")
+    print("Clustering... ", end="")
+    creads, gr = cluster(lr_scores, lr_dists)
+    print("finished.")
+    print("Nr. of clusters: " + str(len(creads)))
+    ps = merge_clusters(scafs, creads, gr, 1) if iteration != 0 else merge_clusters(scafs, creads, gr, 2)
     scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
-
+    for lrn in list(scafs.lreads.keys()):
+        if not scafs.lreads[lrn]["length"]:
+            scafs.delete(lrn)
 
 image = LongReadSVG(args.SVG, zoom=200)
 dwg = image.dwg
@@ -260,40 +275,6 @@ dwg.save()
 
 sys.exit()
 
-# cluster np-reads 
-print("scaffolding long reads ....")
-creads = {}
-clusternr = 0
-olen_scaf = len(scaffolds)+1
-while len(scaffolds)-olen_scaf != 0:
-    olen_scaf = len(scaffolds)
-    for contig in contig2scaffold:
-        if len(contig2scaffold[contig]) > 1:
-            scaf1 = scaffolds[contig2scaffold[contig][0]]
-            if contig2scaffold[contig][1] not in scaffolds:
-                print("here is the problem: " + str(ctg) + " is not in c2s")
-            scaf2 = scaffolds[contig2scaffold[contig][1]]
-            success = scaf1.merge(scaf2, args.mergefile)
-            for ctg in scaf2.contigset:
-                if success:
-                    if id(scaf1) not in contig2scaffold[ctg]:
-                        contig2scaffold[ctg].append(id(scaf1))
-                if id(scaf2) in contig2scaffold[ctg]:
-                    contig2scaffold[ctg].remove(id(scaf2))
-            del(scaffolds[id(scaf2)])
-            break
-
-print("Nr. of scaffolds: " + str(len(scaffolds)))
-# add merge info to mergefile 
-#if args.mergefile:
-#    for scafid, scaf in scaffolds.items():
-#        if not scaf.in_mergefile:
-#            mode = "not_merged"
-#            with open(args.mergefile, "a+") as mergef:
-#                mergef.write("\t".join([mode ,scaf.name, str(scaf.turned_around)]))
-#                mergef.write("\n")
-#        print("Scaffold " + str(scaf.name))
-#        print(", ".join(list(scaf.contigset)))
 
 
 def stringify(nr):
@@ -392,17 +373,6 @@ if args.summaryfile:
                     else:
                         del(contigs[ctg2n])
                     change = True
-            #for ctg2n,ctg2d in srneighs[ctg1]["left"]:
-            #    if ctg2n in contig2scaffold:
-            #        pass
-            #        #print("Problem merging")
-            #    else:
-            #        scaffold.add_short_read_contig_left(ctg1,ctg2n,ctg2d, 0, args.mergefile)
-            #        if ctg2n not in contigs:
-            #            print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
-            #        else:
-            #            del(contigs[ctg2n])
-            #        change = True
             if change:
                 break
 

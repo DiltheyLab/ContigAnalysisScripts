@@ -1,5 +1,5 @@
 from itertools import combinations, cycle, product
-from collections import defaultdict, Counter, deque
+from collections import defaultdict, Counter, deque, OrderedDict
 from statistics import mean
 import svgwrite
 from svgwrite.container import Group
@@ -26,6 +26,12 @@ class Longreads:
     cellline = ""
     ctg2lreads = defaultdict(set)
     contig_lengths = {}
+
+    def delete(self, rid):
+        self.lreads.pop(rid)
+        for ctg, lrids in self.ctg2lreads.items():
+            if rid in lrids:
+                lrids.remove(rid)
 
     def __str__(self):
         out = ""
@@ -224,8 +230,9 @@ class Longreads:
 
     def get_overlapping_bases(self, ctg1, ctgs2, offset):
         overlapping = 0
-        start = ctg1["scr"] + offset
+        start = ctg1["scr"] + offset if ctg1["scr"] + offset > 0 else 0
         end = ctg1["ecr"] + offset
+        #print(ctg1)
         #print("start: " + str(start))
         #print("end: " + str(end))
         for ctg2 in ctgs2:
@@ -245,10 +252,12 @@ class Longreads:
         return overlapping
 
     # pseudoalign matchin contigs if possible, punish overlapping mismatching contigs
-    def pseudoalign(self,rid1, rid2, offset):
+    def pseudoalign(self,rid1, rid2, offset, debug= False):
         overall_score = 0
         for ctg1 in self.lreads[rid1]["maps"]:
-            best_pair_score = 0
+            if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
+               continue
+            best_pair_score = -1
             for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
                 vstart1 = ctg1["scr"] - ctg1["scc"] 
                 vstart2 = ctg2["scr"] - ctg2["scc"] 
@@ -258,14 +267,13 @@ class Longreads:
                 #print("\t".join([ctg1["name"], ctg2["name"], "scoret", str(scoret),"distance",str(distance)]))
                 if scoret > best_pair_score:
                     best_pair_score = scoret 
-            if best_pair_score > 0:
-                #print("\t".join([ctg1["name"], ctg2["name"], "best_pair_score", str(best_pair_score),"distance",str(distance)]))
+            #print("best_pair_score: " + str(best_pair_score))
+            if best_pair_score >= 0:
                 overall_score += best_pair_score
             else: # check if problem for that contig
-                if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
-                   continue
-                else:
-                    overall_score -= 5*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+                #print(ctg1["name"])
+                overall_score -= 3*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+        #print("overall_score: " + str(overall_score))
         return overall_score
 
     def get_possible_offsets(self, lr1, lr2):
@@ -339,6 +347,7 @@ class Longreads:
 
         for lrid in lread_ids:
             lread = self.lreads[lrid]
+            img.add(img.text(lrid, insert = (xoff - 50, ypos), style="font-size:5"))
             g = img.defs.add(Group(id=lrid))
             g.add(svgwrite.shapes.Line((xoff, ypos), ( xoff + lread["length"]/zoom, ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
             for contig in sorted(lread["maps"], key= lambda x: x["scr"]):
@@ -379,22 +388,26 @@ class Longreads:
     def pseudoalign_all(self, debug=False):
         dists = defaultdict(dict)
         lr_scores = defaultdict(dict)
-        toalign = self.lreads.copy()
+        toalign = OrderedDict(sorted(self.lreads.items(), key= lambda lr: lr[1]["length"]))
         while toalign:
             lr1, lread1 = toalign.popitem()
+            #print(lread1["length"])
             dists[lr1][lr1] = 0
             lr_scores[lr1][lr1] = 0
             for lr2 in toalign:
+                if lr2 == lr1:
+                    continue
                 offs = self.get_possible_offsets(lr1,lr2)
                 scores = []
                 for offset in offs:
                     scores.append(self.pseudoalign(lr1,lr2, offset))
                 if scores:
+                    if debug:
+                        print("-"*40)
+                        print(lr1 + "\t" + lr2)
+                        print(offs)
+                        print(scores)
                     if max(scores) > 0:
-                        if debug:
-                            print("-"*40)
-                            print(offs)
-                            print(scores)
                         sidx = scores.index(max(scores))
                         dists[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
                         dists[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
@@ -443,11 +456,6 @@ class Longreads:
 
             #print(vals)
 
-
-            
-
-
-            
 
     def construct_scaffolds(self, contigs):
         scaffolds = {}
@@ -754,10 +762,6 @@ class Scaffold:
             lineargrad2.add_stop_color("50%","#FFFFFF")
             lineargrad2.add_stop_color("100%",col4)
 
-            #leftclip = scc/100
-            #rightclip = (contigs[shortname(ctg)]-ecc)/100
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')', clip_path='url(#mask1)' ))
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
             x = xoff + sc/100
             y = yoff + ypos-ctg_y_halfdrawsize
             w = (ec-sc)/100
@@ -765,7 +769,6 @@ class Scaffold:
             #img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(w),"0","L","0",str(h),"L",str(-w),str(-h)]), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')' ))
             img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x+w),str(y),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id1 + ')' ))
             img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x),str(y+h),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id2 + ')' ))
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
             #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             yt = yoff + ypos + next(ctg_relative_positions)
             img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
@@ -1590,10 +1593,6 @@ class Scaffold2:
             lineargrad2.add_stop_color("50%","#FFFFFF")
             lineargrad2.add_stop_color("100%",col4)
 
-            #leftclip = scc/100
-            #rightclip = (contigs[shortname(ctg)]-ecc)/100
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')', clip_path='url(#mask1)' ))
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
             x = xoff + sc/100
             y = yoff + ypos-ctg_y_halfdrawsize
             w = (ec-sc)/100
@@ -1601,7 +1600,6 @@ class Scaffold2:
             #img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(w),"0","L","0",str(h),"L",str(-w),str(-h)]), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id1 + ')' ))
             img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x+w),str(y),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id1 + ')' ))
             img.add(svgwrite.path.Path(d= " ".join(["M",str(x),str(y),"L",str(x),str(y+h),"L",str(x+w),str(y+h),"L",str(x),str(y)]),  fill = 'url(#'+gradient_id2 + ')' ))
-            #img.add(svgwrite.shapes.Rect((xoff+(sc/100),yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#'+gradient_id2 + ')', clip_path='url(#mask2)' ))
             #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
             yt = yoff + ypos + next(ctg_relative_positions)
             img.add(img.text(ctgn, insert=(xoff+(sc/100),yt),fill=col, style="font-size:3"))
@@ -1632,13 +1630,6 @@ class LongReadSVG:
 
     def __init__(self, filehandle, zoom=100,shortread_info=False):
         dwg = svgwrite.Drawing(filehandle, size=(u'1700', u'2200'), profile='full')
-
-        mask1 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask1"))
-        #mask1.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-        mask1.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 0 1"))
-        mask2 = dwg.defs.add(svgwrite.masking.ClipPath(clipPathUnits = 'objectBoundingBox', id="mask2"))
-        mask2.add(svgwrite.shapes.Rect(fill="black", x="0", y="0", width="100%", height="100%"))
-        mask2.add(svgwrite.path.Path(d="M 0 0 L 1 1 L 1 0"))
            
         #svgwrite.gradients.LinearGradient((0,0), (100,0))
         yp = 10
@@ -1670,16 +1661,18 @@ class LongReadSVG:
         g1M = dwg.defs.add(dwg.g(id='g003'))
         g1M.add(dwg.text("M bases", insert=( xpad, yp), fill='black', style="font-size:7"))
         yp += 5
-        g1M.add(dwg.line((xpad, yp), ( xpad + 3000000/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
+        g1M.add(dwg.line((xpad, yp), ( xpad + 5000000/zoom, yp), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
         g1M.add(dwg.line((xpad, yp-7), ( xpad , yp+7), stroke=svgwrite.rgb(0, 0, 0, '%'), stroke_width="5"))
-        for i in range(0,31):
-            if i%10 == 0:
-                g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-7), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="5"))
+        for i in range(0,51):
+            if i%10 == 0 and i != 0:
+                g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-7), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="7"))
             else:
                 g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-5), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
         g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/zoom-10, yp-10), fill='black', style="font-size:10"))
         g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/zoom-10, yp-10), fill='black', style="font-size:10"))
         g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        g1M.add(dwg.text("4 M", insert=( xpad+ 4000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        g1M.add(dwg.text("5 M", insert=( xpad+ 5000000/zoom-10, yp-10), fill='black', style="font-size:10"))
         dwg.add(g1M)
         #yp += 20
         #rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/zoom,7), stroke='green', stroke_width=1 ))
