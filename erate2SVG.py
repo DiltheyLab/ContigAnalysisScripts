@@ -117,6 +117,7 @@ all_nodes = set(scafs.lreads.keys())
 # greedyly expand component with best matching thing
 gr = nx.DiGraph()
 for lr1i, lr1 in lr_scores.items():
+    gr.add_edge(lr1i,lr1i,dist=0)
     if lr1i not in gr.nodes():
         gr.add_node(lr1i)
     ms = max(lr1.values())
@@ -125,14 +126,18 @@ for lr1i, lr1 in lr_scores.items():
         gr.add_node(lr2i)
     #print(lr2i)
     #print(lr_dists[lr1i][lr2i])
-    gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
-    gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
+    if lr_dists[lr1i][lr2i] is not None:
+        gr.add_edge(lr1i,lr2i,dist=lr_dists[lr1i][lr2i])
+        gr.add_edge(lr2i,lr1i,dist=lr_dists[lr2i][lr1i])
 
 
 # order components
 creads = []
 for component in list(nx.connected_components((gr.to_undirected()))):
     # get all distances from random anchor node
+    if len(component) == 1:
+        creads.append(deque(component))
+        continue
     anchor = sample(component,1)[0]
     worklist = deque([anchor])
     ns = gr.neighbors(anchor)
