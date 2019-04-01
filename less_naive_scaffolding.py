@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from Bio import SeqIO
+import pickle
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -23,6 +24,7 @@ parser.add_argument("--summaryfile", help="Contig Distance Summary file")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 parser.add_argument("--mergefile", help="File that contains merging information to retrieve the sequence of scaffolds after.")
 parser.add_argument("--contigsmergefile", help="File with information on what contigs should be merged.")
+parser.add_argument("--final_lrs", help="File to store final Longreads")
 parser.add_argument("contigfile", help="Contig File")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("SVG", help="Scaffolds are drawn to this SVG file")
@@ -226,7 +228,7 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
                 ctgs[contig["name"]].append(contig)
 
         for ctgn, ctgdists in vstarts.items():
-            indices, clustered_dists = split_distances(ctgdists, 2000)
+            indices, clustered_dists = split_distances(ctgdists, 4000)
             #print(indices)
             for clusteridx, cluster in enumerate(clustered_dists):
                 sccs = []
@@ -264,6 +266,8 @@ for iteration in range(10):
     print("Nr. of clusters: " + str(len(creads)))
     ps = merge_clusters(scafs, creads, gr, 1) if iteration != 0 else merge_clusters(scafs, creads, gr, 2)
     scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
+    scafs.sort_by_starts()
+    #scafs.filter_overlapped_contigs()
     for lrn in list(scafs.lreads.keys()):
         if not scafs.lreads[lrn]["length"]:
             scafs.delete(lrn)
@@ -272,6 +276,10 @@ image = LongReadSVG(args.SVG, zoom=200)
 dwg = image.dwg
 scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=200)
 dwg.save()
+
+if args.final_lrs:
+    with open(args.final_lrs, 'wb') as f:
+        pickle.dump(scafs, f, pickle.HIGHEST_PROTOCOL)
 
 sys.exit()
 
