@@ -160,7 +160,7 @@ class Longreads:
         for rid,read in self.lreads.items():
             toremove = []
             last_end = 0
-            for ctg in read["maps"]:
+            for ctg in sorted(read["maps"], key = lambda x: x["scr"]):
                 if ctg["ecr"] < last_end:
                     toremove.append(ctg)
                 else:
@@ -235,27 +235,35 @@ class Longreads:
         #print(ctg1)
         #print("start: " + str(start))
         #print("end: " + str(end))
-        for ctg2 in ctgs2:
+        for ctg2 in sorted(ctgs2, key= lambda x: x["scr"]):
             if ctg2["scr"] > end:
                 return overlapping
             elif ctg2["ecr"] < start:
                 continue
             else:
-                if start < ctg2["ecr"]:
-                    overlap = ctg2["ecr"] - start
-                    overlapping += overlap
-                    #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
-                if end > ctg2["scr"]:
-                    overlap = end - ctg2["scr"]
-                    overlapping += overlap
-                    #print("overlap: " + ctg1["name"] + " : " + ctg2["name"] + " " + str(overlap))
+                if ctg2["ecr"] > end:
+                    if ctg2["scr"] < start:
+                        overlapping += end - start
+                    elif ctg2["scr"] <= end:
+                        overlapping += end - ctg2["scr"]
+                else:
+                    if ctg2["scr"] > start:
+                        overlapping += ctg2["ecr"] - ctg2["scr"]
+                    elif ctg2["ecr"] > start:
+                        overlapping += ctg2["ecr"] - start
         return overlapping
 
     # pseudoalign matchin contigs if possible, punish overlapping mismatching contigs
     def pseudoalign(self,rid1, rid2, offset, debug= False):
+        #print("-"*50)
+        #print("offset: " + str(offset))
         overall_score = 0
-        for ctg1 in self.lreads[rid1]["maps"]:
+        for ctg1 in sorted(self.lreads[rid1]["maps"], key=lambda x: x["scr"]):
+            #print("\t".join([ctg1["name"], str(ctg1["scr"]+offset), str(ctg1["ecr"]+offset)]))
+            #print(self.lreads[rid2]["maps"][0])
+            #print(self.lreads[rid2]["maps"][-1])
             if ctg1["ecr"] + offset < self.lreads[rid2]["maps"][0]["scr"] or ctg1["scr"] + offset > self.lreads[rid2]["maps"][-1]["ecr"]:
+               
                continue
             best_pair_score = -1
             for ctg2 in self.lreads[rid2]["mapsc"][ctg1["name"]]:
@@ -267,12 +275,15 @@ class Longreads:
                 #print("\t".join([ctg1["name"], ctg2["name"], "scoret", str(scoret),"distance",str(distance)]))
                 if scoret > best_pair_score:
                     best_pair_score = scoret 
-            #print("best_pair_score: " + str(best_pair_score))
+            #print("\t".join(["best_pair_score", ctg1["name"], str(best_pair_score)]))
             if best_pair_score >= 0:
                 overall_score += best_pair_score
             else: # check if problem for that contig
                 #print(ctg1["name"])
-                overall_score -= 3*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+                #print("getting overlapping bases for: " + str(ctg1["name"]))
+                nscore = - 3*self.get_overlapping_bases(ctg1, self.lreads[rid2]["maps"], offset)
+                #print("penalty: " + str(nscore))
+                overall_score += nscore
         #print("overall_score: " + str(overall_score))
         return overall_score
 
@@ -322,21 +333,36 @@ class Longreads:
         def get_colors_from_nr(nr):
             col1 = "#000000"
             col2 = "#000000"
-            if nr==0 or nr==1:
+            if nr==0:
                 col1 = "#FF0000"
                 col2 = "#0000FF"
-            elif nr==2 or nr==3:
+            elif nr == 1:
+                col1 = "#5CDB95"
+                col2 = "#05386B"
+            elif nr==2:
                 col1 = "#FFE119"
                 col2 = "#000000"
-            elif nr==4 or nr==5:
+            elif nr == 3:
+                col1 = "#379683"
+                col2 = "#BC986A"
+            elif nr==4:
                 col1 = "#911eb4"
                 col2 = "#a9a9a9"
-            elif nr==6 or nr==7:
+            elif nr == 5:
+                col1 = "#659DBD"
+                col2 = "#F64C72"
+            elif nr==6:
                 col1 = "#000075"
                 col2 = "#f58231"
-            elif nr==8 or nr==9:
+            elif nr == 7:
+                col1 = "#553D67"
+                col2 = "#C38D9E"
+            elif nr==8 :
                 col1 = "#e6beff"
                 col2 = "#808000"
+            elif nr == 9:
+                col1 = "#41B3A3"
+                col2 = "#501B1D"
             return [col1, col2]
 
 
