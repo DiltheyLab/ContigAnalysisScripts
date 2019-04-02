@@ -274,7 +274,7 @@ for iteration in range(10):
 
 image = LongReadSVG(args.SVG, zoom=200)
 dwg = image.dwg
-scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=200)
+scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=200, ctg_y_drawsize = 150)
 dwg.save()
 
 if args.final_lrs:
@@ -282,8 +282,6 @@ if args.final_lrs:
         pickle.dump(scafs, f, pickle.HIGHEST_PROTOCOL)
 
 sys.exit()
-
-
 
 def stringify(nr):
     if nr >= 1000000:
@@ -296,21 +294,21 @@ def stringify(nr):
         return str(nr)
 
 lr_lengths = []
-lr_lengths.append([])
-lr_lengths.append([])
-for scaf in scaffolds.values():
-    lr_lengths[1].append(scaf.length)
-    #lr_lengths[0].append(scaf.name + "\n" + stringify(scaf.length))
-    if scaf.length > 10000:
-        lr_lengths[0].append(stringify(scaf.length))
-    else:
-        lr_lengths[0].append("")
-    #lr_lengths[0].append(scaf.name)
-    #print("length of scaffold " + scaf.name + ": " + str(scaf.length))
-norm = matplotlib.colors.Normalize(vmin=min(lr_lengths[1]), vmax=max(lr_lengths[1]))
-colors = [matplotlib.cm.gist_ncar(value) for value in random.sample(range(1024),len(lr_lengths[1]))]
-lr_lengths.append(colors)
+#lr_lengths.append([])
+#lr_lengths.append([])
+for lr in scafs.lreads.values():
+    lr_lengths.append(lr["length"])
+norm = matplotlib.colors.Normalize(vmin=min(lr_lengths), vmax=max(lr_lengths))
+lr_colors = [matplotlib.cm.gist_ncar(value) for value in random.sample(range(1024),len(lr_lengths))]
 
+
+if args.squareplot:
+    plt.rc('font', size=15)          # controls default text sizes
+    #plt.subplot(121)
+    squarify.plot(sizes=lr_lengths, label=[stringify(x) for x in lr_lengths], alpha=.9,color = lr_colors )
+    #plt.axis('off')
+    plt.savefig(args.squareplot)
+sys.exit()
 
 def is_rightmost(ctg):
     try:
@@ -412,16 +410,17 @@ dwg.save()
 #norm = matplotlib.colors.Normalize(vmin=min(lrsr_lengths[1]), vmax=max(lrsr_lengths[1]))
 #colors = [matplotlib.cm.tab20b(norm(value)) for value in lrsr_lengths[1]]
 #lrsr_lengths.append(colors)
-plt.rc('font', size=15)          # controls default text sizes
-plt.subplot(121)
-squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9,color = colors )
-#squarify.plot(sizes=lr_lengths[1], alpha=.9 )
-plt.axis('off')
-plt.title('after long read scaffolding')
-plt.subplot(122)
-squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
-#squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
-plt.axis('off')
-plt.title('after long + short read scaffolding')
-plt.show()
+if args.squareplot:
+    plt.rc('font', size=15)          # controls default text sizes
+    plt.subplot(121)
+    squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9,color = colors )
+    #squarify.plot(sizes=lr_lengths[1], alpha=.9 )
+    plt.axis('off')
+    plt.title('after long read scaffolding')
+    plt.subplot(122)
+    squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
+    #squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
+    plt.axis('off')
+    plt.title('after long + short read scaffolding')
+    plt.savefig(args.squareplot)
 
