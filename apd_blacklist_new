@@ -1,0 +1,32 @@
+82508bf1-02c4-4fd1-b393-f49fa097697f    all # hairpin
+cd3458a4-c4dc-45d4-830d-c500b7c82b27    all # hairpin
+377f2f0d-55d4-4fd9-bb11-720ff40015c5    all # hairpin
+b4d03485-adf3-4336-b73a-5c3346a559db    all # hairpin
+9b2b99df-abf7-4bb3-bab2-1be6c8cba87f    all # hairpin
+f126ad35-414e-4c88-a6b0-e9fbf91bbceb    all # hairpin
+e8659bfb-c23a-49c8-a923-d29b8112c97f    all # hairpin
+450d15f2-ee91-4f09-a22d-d133f2ae4f8e    all # hairpin
+d7991454-0483-41d1-b291-30c9cc7e7425    all # hairpin
+f092d24d-cc71-4621-a21d-3208087657e8    all # hairpin
+fc048efd-f321-4ae3-b30d-bab1f53ddb89    all # hairpin
+1dd60bda-e8ee-4b18-8770-36a0d2020d09    all # hairpin
+contig  1011APD 1.0 # just weir
+contig  150APD  1.0 # these ...
+contig  799APD  1.0 # conflict with 116
+0660e9b7-e285-4608-8464-aad21385a4c7    all # weird
+bd87a606-6eb3-4400-81e2-9b7045cde788    all # too much 
+contig  2106APD 1.0 # small and bad
+3807b87f-2c0c-4d96-8ab7-fae55b4c748f    all # doubling 2088APD
+ac287eff-6915-4476-9d5c-531289ec9391    all # doubling 305APD
+a9a1c7ff-3415-49f8-b42f-7fa3c177b17d    all # doubling 305APD
+74cf3254-2284-4d46-8a1f-7c1393f7ecd7    all # hairpin
+68f80ae4-c97e-446b-9c6e-8249959ddf6c    all # doubling 74APD
+contig  74APD 1.0   # don't know where this goes
+contig  2215APD 1.0 # unnecessary
+contig  108APD 1.0 # unnecessary
+contig  2374APD 1.0 # unnecessary
+44dd82a6-7ebf-4557-aa23-0b518b0c428a    2324APD # doubling
+contig  1379APD 1.0 # small and double
+contig  744APD 1.0 # small and double
+contig  221APD 1.0 # small and double
+contig  53APD 1.0 # small and double
