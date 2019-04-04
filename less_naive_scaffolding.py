@@ -130,14 +130,20 @@ print("Nr. of Contigs: " + str(len(contigs)))
 
 
 
-def cluster(scores, dists):
+def cluster(scores, dists, verbose= False):
     # greedyly expand components with best matching thing
     gr = nx.DiGraph()
+    if verbose:
+        print(scores)
     for lr1i, lr1 in scores.items():
         if lr1i not in gr.nodes():
             gr.add_node(lr1i)
         ms = max(lr1.values())
         lr2i = max(lr1.keys(), key=lambda x: lr1[x])
+        if verbose:
+            print("lr1i: " + str(lr1i))
+            print("lr2i: " + str(lr2i))
+            print("ms: " + str(ms))
         if lr2i not in gr.nodes():
             gr.add_node(lr2i)
         #print(lr2i)
@@ -255,10 +261,7 @@ print("Nr. of reads: " + str(len(scafs.lreads)))
 iterations = 10
 for iteration in range(iterations):
     print("Pseudoaligning all... ", end="")
-    if iteration == 19:
-        lr_scores, lr_dists = scafs.pseudoalign_all(True)
-    else:
-        lr_scores, lr_dists = scafs.pseudoalign_all()
+    lr_scores, lr_dists = scafs.pseudoalign_all()
     print("finished.")
     print("Clustering... ", end="")
     creads, gr = cluster(lr_scores, lr_dists)
@@ -268,16 +271,16 @@ for iteration in range(iterations):
     scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
     scafs.sort_by_starts()
     
-    if iteration == iterations-1:
-        scafs.filter_small_double_contigs(contigs, 0.8, True)
+    if iteration > 5:
+        scafs.filter_small_double_contigs(contigs, 0.85, True)
     #scafs.filter_overlapped_contigs()
     for lrn in list(scafs.lreads.keys()):
         if not scafs.lreads[lrn]["length"]:
             scafs.delete(lrn)
 
-image = LongReadSVG(args.SVG, zoom=200)
+image = LongReadSVG(args.SVG, zoom=100)
 dwg = image.dwg
-scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=200, ctg_y_drawsize = 150)
+scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=100, ctg_y_drawsize = 20)
 dwg.save()
 
 if args.final_lrs:

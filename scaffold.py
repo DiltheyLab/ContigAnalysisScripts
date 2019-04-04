@@ -193,11 +193,9 @@ class Longreads:
                             pass
                             #print("Removed " + ctg["name"] + " from " + str(rid) + "\t" + str(contigcounts[ctg["name"]]) + " remaining.")
         if verbose:
-            for ctgn in set([x for x in contigcounts.keys() if contigcounts[x] > 1]):
+            for ctgn in set([x for x in contigcounts.keys() if contigcounts[x] != 1]):
                 print(ctgn + ": " + str(contigcounts[ctgn]))
             
-                        
-        
 
     def filter_reverse_small_contigs(self, size):
         for rid,read in self.lreads.items():
@@ -429,7 +427,7 @@ class Longreads:
                     direction = "<"
                 g.add(img.text(direction, insert=(xoff+sc/zoom,ypos+2),style="font-size:6"))
             img.add(g)
-            ypos += ctg_y_drawsize + 10
+            ypos += ctg_y_drawsize + 30
         return ypos-yoff
 
     
