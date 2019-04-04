@@ -177,6 +177,28 @@ class Longreads:
             for item in toremove:
                 self.remove_contig_from_read(rid, item)
 
+    def filter_small_double_contigs(self, ctglengths, fraction, verbose=False):
+        contigcounts = Counter()
+        for rid,read in self.lreads.items():
+            for ctg in read["maps"]:
+                contigcounts[ctg["name"]] += 1
+        multis = set([x for x in contigcounts.keys() if contigcounts[x] > 1])
+        for rid,read in self.lreads.items():
+            for ctg in read["maps"]:
+                if ctg["name"] in multis:
+                    if (ctg["ecc"] - ctg["scc"])/ctglengths[ctg["name"]] < fraction:
+                        self.remove_contig_from_read(rid, ctg)
+                        contigcounts[ctg["name"]] -= 1
+                        if verbose:
+                            pass
+                            #print("Removed " + ctg["name"] + " from " + str(rid) + "\t" + str(contigcounts[ctg["name"]]) + " remaining.")
+        if verbose:
+            for ctgn in set([x for x in contigcounts.keys() if contigcounts[x] > 1]):
+                print(ctgn + ": " + str(contigcounts[ctgn]))
+            
+                        
+        
+
     def filter_reverse_small_contigs(self, size):
         for rid,read in self.lreads.items():
             toremove = []
@@ -325,7 +347,7 @@ class Longreads:
                 #rect.fill(color="none").dasharray([2, 2])
                 #img.add(img.text(lrid, insert=(xoff+(lrc[0]/100),yoff+ypos-1),fill="green", style="font-size:2"))
                 #ypos += y_space_per_lr
-        ypos += ypad
+        ypos += ctg_y_drawsize + ypad
         ctg_y_halfdrawsize = ctg_y_drawsize/2
         ctg_relative_positions = cycle([-ctg_y_halfdrawsize-2, ctg_y_halfdrawsize+4, -ctg_y_halfdrawsize-5, ctg_y_halfdrawsize+7])
         gradient_idc = 0
@@ -407,7 +429,7 @@ class Longreads:
                     direction = "<"
                 g.add(img.text(direction, insert=(xoff+sc/zoom,ypos+2),style="font-size:6"))
             img.add(g)
-            ypos += 35 
+            ypos += ctg_y_drawsize + 10
         return ypos-yoff
 
     
@@ -1694,11 +1716,11 @@ class LongReadSVG:
                 g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-7), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="7"))
             else:
                 g1M.add(dwg.line( (xpad + (1000000/zoom)/10 * i, yp-5), (xpad + (1000000/zoom)/10 * i, yp+200), stroke=svgwrite.rgb(0,0,0,'%'),stroke_width="2"))
-        g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/zoom-10, yp-10), fill='black', style="font-size:10"))
-        g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/zoom-10, yp-10), fill='black', style="font-size:10"))
-        g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/zoom-10, yp-10), fill='black', style="font-size:10"))
-        g1M.add(dwg.text("4 M", insert=( xpad+ 4000000/zoom-10, yp-10), fill='black', style="font-size:10"))
-        g1M.add(dwg.text("5 M", insert=( xpad+ 5000000/zoom-10, yp-10), fill='black', style="font-size:10"))
+        g1M.add(dwg.text("1 M", insert=( xpad+ 1000000/zoom-10, yp-10), fill='black', style="font-size:100"))
+        g1M.add(dwg.text("2 M", insert=( xpad+ 2000000/zoom-10, yp-10), fill='black', style="font-size:100"))
+        g1M.add(dwg.text("3 M", insert=( xpad+ 3000000/zoom-10, yp-10), fill='black', style="font-size:100"))
+        g1M.add(dwg.text("4 M", insert=( xpad+ 4000000/zoom-10, yp-10), fill='black', style="font-size:100"))
+        g1M.add(dwg.text("5 M", insert=( xpad+ 5000000/zoom-10, yp-10), fill='black', style="font-size:100"))
         dwg.add(g1M)
         #yp += 20
         #rect = dwg.add(svgwrite.shapes.Rect((xpad,yp-3), (2000/zoom,7), stroke='green', stroke_width=1 ))

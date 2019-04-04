@@ -11,7 +11,6 @@ from operator import itemgetter
 from itertools import combinations, cycle, product
 from collections import defaultdict, deque
 import svgwrite
-import squarify
 from scaffold import Scaffold, Longreads, LongReadSVG
 import networkx as nx
 from statistics import mean
@@ -253,7 +252,8 @@ scafs.sort_by_starts()
 print("Nr. of reads: " + str(len(scafs.lreads)))
 
 
-for iteration in range(10):
+iterations = 10
+for iteration in range(iterations):
     print("Pseudoaligning all... ", end="")
     if iteration == 19:
         lr_scores, lr_dists = scafs.pseudoalign_all(True)
@@ -267,6 +267,9 @@ for iteration in range(10):
     ps = merge_clusters(scafs, creads, gr, 1) if iteration != 0 else merge_clusters(scafs, creads, gr, 2)
     scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
     scafs.sort_by_starts()
+    
+    if iteration == iterations-1:
+        scafs.filter_small_double_contigs(contigs, 0.8, True)
     #scafs.filter_overlapped_contigs()
     for lrn in list(scafs.lreads.keys()):
         if not scafs.lreads[lrn]["length"]:
@@ -283,32 +286,6 @@ if args.final_lrs:
 
 sys.exit()
 
-def stringify(nr):
-    if nr >= 1000000:
-        return "{:.1f}".format(nr/1000000) + " M"
-    elif nr >= 10000:
-        return "{:.0f}".format(nr/1000) + " k"
-    elif nr > 1000:
-        return "{:.1f}".format(nr/1000) + " k"
-    else:
-        return str(nr)
-
-lr_lengths = []
-#lr_lengths.append([])
-#lr_lengths.append([])
-for lr in scafs.lreads.values():
-    lr_lengths.append(lr["length"])
-norm = matplotlib.colors.Normalize(vmin=min(lr_lengths), vmax=max(lr_lengths))
-lr_colors = [matplotlib.cm.gist_ncar(value) for value in random.sample(range(1024),len(lr_lengths))]
-
-
-if args.squareplot:
-    plt.rc('font', size=15)          # controls default text sizes
-    #plt.subplot(121)
-    squarify.plot(sizes=lr_lengths, label=[stringify(x) for x in lr_lengths], alpha=.9,color = lr_colors )
-    #plt.axis('off')
-    plt.savefig(args.squareplot)
-sys.exit()
 
 def is_rightmost(ctg):
     try:
