@@ -278,10 +278,10 @@ for iteration in range(iterations):
         if not scafs.lreads[lrn]["length"]:
             scafs.delete(lrn)
 
-image = LongReadSVG(args.SVG, zoom=100)
-dwg = image.dwg
-scafs.to_SVG(dwg, scafs.lreads.keys(), contigs, 30, image.yp, zoom=100, ctg_y_drawsize = 20)
-dwg.save()
+lrsvg = LongReadSVG(args.SVG, zoom=200)
+img = lrsvg.dwg
+scafs.to_SVG(lrsvg, scafs.lreads.keys(), contigs, 30, lrsvg.yp, ctg_y_drawsize = 20)
+img.save()
 
 if args.final_lrs:
     with open(args.final_lrs, 'wb') as f:

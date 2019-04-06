@@ -331,7 +331,9 @@ class Longreads:
 
 
     # Returns the space in y that it needs, depends on the number of longreads that this object contains
-    def to_SVG(self, img, lread_ids, ctglengths, xoff, yoff, zoom=100, ctg_y_drawsize=12, show_lr_ids=False):
+    def to_SVG(self, svglongread, lread_ids, ctglengths, xoff, yoff, ctg_y_drawsize=12, show_lr_ids=False):
+        zoom = svglongread.zoom
+        img = svglongread.dwg
         ypad = 7
         xpad = 20
         col = "black"
@@ -1675,6 +1677,7 @@ class Scaffold2:
 class LongReadSVG:
 
     def __init__(self, filehandle, zoom=100,shortread_info=False):
+        self.zoom = zoom
         dwg = svgwrite.Drawing(filehandle, size=(u'1700', u'2200'), profile='full')
            
         #svgwrite.gradients.LinearGradient((0,0), (100,0))
