@@ -30,3 +30,5 @@ contig  1379APD 1.0 # small and double
 contig  744APD 1.0 # small and double
 contig  221APD 1.0 # small and double
 contig  53APD 1.0 # small and double
+c9f07b9d-e667-45dc-9b59-8e2d7ec71cb7    all # causes problems
+6d464979-3d51-4ae2-97c1-0df2fb93f915    2443APD # doubles 2443APD
