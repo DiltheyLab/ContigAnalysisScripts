@@ -63,7 +63,7 @@ reverse_mappers.add("472DBB")
 scafs.turn_longreads_around(reverse_mappers)
 scafs.sort_by_starts()
 scafs.filter_small_contigs(300)
-scafs.filter_overlapped_contigs(0.5)
+#scafs.filter_overlapped_contigs(0.5)
 scafs.filter_contigcounts(args.mincontigs) 
 
 
@@ -234,17 +234,15 @@ for cluster in sorted_clusters:
         g.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+scafs.lreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True
         col = "black"
-        for read in scafs.lreads[rid]["maps"]:
-            #print(read)
-            sc = read["scr"]
-            ec = read["ecr"]
-            scc = read["scc"]
-            ecc = read["ecc"]
-            ctg = read["name"].rstrip("rc").rstrip(args.linename)
-            ctgn = read["name"].rstrip("rc")
-            #ctg = read[0]
-            if ctg.startswith("chr"):
-                ctg = ctg[0:8]
+        for ctg in scafs.lreads[rid]["maps"]:
+            sc = ctg["scr"]
+            ec = ctg["ecr"]
+            scc = ctg["scc"]
+            ecc = ctg["ecc"]
+            ctgnr = ctg["name"].rstrip("rc").rstrip(args.linename)
+            ctgn = ctg["name"].rstrip("rc")
+            if ctgn.startswith("chr"):
+                ctgn = ctgn[0:8]
                 continue
             lenc = contigs[shortname(ctgn)]
 
@@ -255,33 +253,38 @@ for cluster in sorted_clusters:
             #rightclip = (contigs[ctgn]-ecc)/100
             xa = -scc/(ecc-scc)
             xe = 1+(contigs[shortname(ctgn)]-ecc)/(ecc-scc)
-            if read["strand"] == 1:
+            if ctg["strand"] == 1:
                 xa = -(contigs[shortname(ctgn)]-ecc)/(ecc-scc)
                 xe = 1+scc/(ecc-scc)
             lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id=str(gradient_idc), x1=xa, x2=xe, y1=0, y2=0))
-            if ctg.endswith("0") or ctg.endswith("1"):
+            if ctgnr.endswith("0") or ctgnr.endswith("1"):
                 col1 = "#FF0000"
                 col2 = "#0000FF"
-            elif ctg.endswith("2") or ctg.endswith("3"):
+            elif ctgnr.endswith("2") or ctgnr.endswith("3"):
                 col1 = "#FFE119"
                 col2 = "#000000"
-            elif ctg.endswith("4") or ctg.endswith("5"):
+            elif ctgnr.endswith("4") or ctgnr.endswith("5"):
                 col1 = "#911eb4"
                 col2 = "#a9a9a9"
-            elif ctg.endswith("6") or ctg.endswith("7"):
+            elif ctgnr.endswith("6") or ctgnr.endswith("7"):
                 col1 = "#000075"
                 col2 = "#f58231"
-            elif ctg.endswith("8") or ctg.endswith("9"):
+            elif ctgnr.endswith("8") or ctgnr.endswith("9"):
                 col1 = "#e6beff"
                 col2 = "#808000"
                 
-            if read["strand"] == 1:
+            if ctg["strand"] == 1:
                 tcol = col1
                 col1 = col2
                 col2 = tcol
-            lineargrad.add_stop_color("0%",col1)
-            lineargrad.add_stop_color("50%","#FFFFFF")
-            lineargrad.add_stop_color("100%",col2)
+            upperl = 0.90
+            lowerl = 0.70
+            opacity = ctg["quality"]/(upperl-lowerl) - lowerl/(upperl-lowerl)
+            #opacity = 0.2
+            opacity = min(max(opacity,0),1)
+            lineargrad.add_stop_color("0%",col1,opacity)
+            lineargrad.add_stop_color("50%","#FFFFFF",opacity)
+            lineargrad.add_stop_color("100%",col2, opacity)
             #g.add(svgwrite.shapes.Rect((xpad+(sc/100)-leftflip,yoff+ypos-ctg_y_halfdrawsize), ((ec-sc)/100+leftclip+rightclip,ctg_y_drawsize), stroke='black', stroke_width=1, fill = 'url(#rwb)'))
 #lineargrad = dwg.defs.add(svgwrite.gradients.LinearGradient(id="rwb"))
             g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')'))
@@ -296,10 +299,10 @@ for cluster in sorted_clusters:
                 yt = ypad+ypos+13
             above = not above
             #g.add(dwg.text(ctg, insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:6"))
-            g.add(dwg.text("s"+ctg+"$", insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:4"))
-            if read["strand"] == 0:
+            g.add(dwg.text("s"+ctgn+"$", insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:4"))
+            if ctg["strand"] == 0:
                 direction = ">"
-            elif read["strand"] == 1:
+            elif ctg["strand"] == 1:
                 direction = "<"
             g.add(dwg.text(direction, insert=(xpad+(xoffset+sc)/100,ypad+ypos+2),style="font-size:6"))
         dwg.add(g)
