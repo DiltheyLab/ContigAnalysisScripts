@@ -32,3 +32,9 @@ contig  221APD 1.0 # small and double
 contig  53APD 1.0 # small and double
 c9f07b9d-e667-45dc-9b59-8e2d7ec71cb7    all # causes problems
 6d464979-3d51-4ae2-97c1-0df2fb93f915    2443APD # doubles 2443APD
+7ad99c6d-282a-43bb-a4ea-57de5131dee3    all # hairpin
+3903ebc9-bb41-4634-96a7-c568638e4bac    all # bad read
+ea1fd13e-4bd5-4557-9c6b-79b7e00f4006    all # bad read
+03ca873f-89de-483a-b8d3-abc16b875011    all # bad read
+31826fbe-5890-471b-bb04-1c6eda9f59ab    all # bad read
+a3f07f2a-5794-487f-a536-55cfb27e0fe7    all # bad read

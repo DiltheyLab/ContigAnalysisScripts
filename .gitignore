@@ -2,3 +2,8 @@
 *.o
 *.ps
 out.*
+*.dat
+*.out
+*.fasta
+*.fa
+*.tmp
