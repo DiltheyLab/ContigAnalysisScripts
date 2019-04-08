@@ -248,32 +248,39 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
     return pseudolongreads
 
 scafs = Longreads(args.inputfiles, blacklist, args.linename)
-scafs.filter_contigcounts(args.mincontigs)
 #scafs.filter_whitelist_ctgs(set(["1115APD"]))
 scafs.filter_small_contigs(300)
 scafs.filter_reverse_small_contigs(600)
+scafs.filter_low_quality_contigs(0.81)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
+scafs.filter_contigcounts(args.mincontigs)
 
 print("Nr. of reads: " + str(len(scafs.lreads)))
 
-
-iterations = 10
-for iteration in range(iterations):
+status = 0
+for iteration in range(10):
     print("Pseudoaligning all... ", end="")
     lr_scores, lr_dists = scafs.pseudoalign_all()
     print("finished.")
     print("Clustering... ", end="")
     creads, gr = cluster(lr_scores, lr_dists)
+    if len(scafs.lreads) == len(creads):
+        status += 1
     print("finished.")
     print("Nr. of clusters: " + str(len(creads)))
     ps = merge_clusters(scafs, creads, gr, 1) if iteration != 0 else merge_clusters(scafs, creads, gr, 2)
     scafs = Longreads.init_from_dict(ps, scafs.cellline, contigs, scafs.lreads)
     scafs.sort_by_starts()
     
-    if iteration > 5:
-        scafs.filter_small_double_contigs(contigs, 0.85, True)
-    #scafs.filter_overlapped_contigs()
+    if status == 2:
+        scafs.filter_small_double_contigs(contigs, 0.85, False)
+        scafs.filter_reverse_double_contigs(contigs, False)
+        scafs.filter_overlapped_contigs(True)
+    elif status == 4:
+        scafs.filter_reverse_double_contigs(contigs, True)
+        break
+
     for lrn in list(scafs.lreads.keys()):
         if not scafs.lreads[lrn]["length"]:
             scafs.delete(lrn)
