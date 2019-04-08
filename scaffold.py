@@ -54,8 +54,9 @@ class Longreads:
                     if pafformat:
                         [rid, lenr, scr, ecr, strandstring, ctg, lenc, scc, ecc, nr_matches, block_len, quality] = line.split()[0:12]
                         strand = 0 if strandstring == "+" else 1
+                        eratequality = 100 # TODO calculate from paf quality
                     else:
-                        [rid, ctg, t2, t3, t4, scr, ecr, lenr, strandstring, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
+                        [rid, ctg, t2, eratequality, t4, scr, ecr, lenr, strandstring, scc, ecc, lenc, t12, t13, t14, t15, t16] = line.split()
                         strand = 0 if strandstring == "0" else 1
                         if strand == 1: # workaround for misleading coordinates in erates file
                             tmp = int(lenc) - int(ecc)
@@ -64,7 +65,7 @@ class Longreads:
                     if self.cellline not in ctg:
                         continue
                     self.contig_lengths[ctg] = int(lenc)
-                    data = {"name":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc)}
+                    data = {"name":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc), "quality": float(eratequality)/100.0}
                     if whitelist_lreads:
                         if rid not in whitelist_lreads:
                             continue
@@ -155,8 +156,14 @@ class Longreads:
             self.ctg2lreads[ctgn].remove(rid)
             self.lreads[rid]["ctgset"].remove(ctgn)
 
+    def filter_low_quality_contigs(self, quality):
+        for rid, lread in self.lreads.items():
+            for ctg in lread["maps"]:
+                if ctg["quality"] < quality:
+                    self.remove_contig_from_read(rid, ctg)
+
     # assume contigs are sorted
-    def filter_overlapped_contigs(self, fraction=0.5):
+    def filter_overlapped_contigs(self, verbose=False):
         for rid,read in self.lreads.items():
             toremove = []
             last_end = 0
@@ -167,6 +174,8 @@ class Longreads:
                     last_end = ctg["ecr"]
             for item in toremove:
                 self.remove_contig_from_read(rid, item)
+                if verbose:
+                    print("Removed " + item["name"] + " from " + rid + ".")
 
     def filter_small_contigs(self, size):
         for rid,read in self.lreads.items():
@@ -195,7 +204,24 @@ class Longreads:
         if verbose:
             for ctgn in set([x for x in contigcounts.keys() if contigcounts[x] != 1]):
                 print(ctgn + ": " + str(contigcounts[ctgn]))
-            
+
+    def filter_reverse_double_contigs(self, ctglengths, verbose=False):
+        contigcounts = Counter()
+        for rid,read in self.lreads.items():
+            for ctg in read["maps"]:
+                contigcounts[ctg["name"]] += 1
+        multis = set([x for x in contigcounts.keys() if contigcounts[x] > 1])
+        for rid,read in self.lreads.items():
+            for ctg in read["maps"]:
+                if ctg["name"] in multis:
+                    if ctg["strand"] == 1:
+                        self.remove_contig_from_read(rid, ctg)
+                        contigcounts[ctg["name"]] -= 1
+        if verbose:
+            #known_ctgs = set([x+"APD" for x in ["401","411","388", "339","58","1497","2328", "2185", "558", "419", "1697", "52", "47", "162", "1004", "370","462","407"]])
+            #print(known_ctgs)
+            for ctgn in set([x for x in contigcounts.keys() if contigcounts[x] != 1]):
+                print(ctgn + ": " + str(contigcounts[ctgn]))
 
     def filter_reverse_small_contigs(self, size):
         for rid,read in self.lreads.items():
