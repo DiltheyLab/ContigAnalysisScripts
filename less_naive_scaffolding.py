@@ -243,7 +243,7 @@ def merge_clusters(longreads, clustered_reads, distance_graph, minlength=1):
                     sccs.append(ctgs[ctgn][ctgidx]["scc"])
                     eccs.append(ctgs[ctgn][ctgidx]["ecc"])
                     strands.append(ctgs[ctgn][ctgidx]["strand"])
-                newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":min(sccs), "ecc":max(eccs), "scr":round(mean(cluster)) + min(sccs), "ecr":round(mean(cluster))+ max(eccs)}
+                newctg = {"strand": round(mean(strands)), "name": ctgn, "scc":round(mean(sccs)), "ecc":round(mean(eccs)), "scr":round(mean(cluster)) + round(mean(sccs)), "ecr":round(mean(cluster))+ round(mean(eccs))}
                 p["maps"].append(newctg)
     return pseudolongreads
 
@@ -255,6 +255,7 @@ scafs.filter_low_quality_contigs(0.81)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
 scafs.filter_contigcounts(args.mincontigs)
+#scafs.copy()
 
 print("Nr. of reads: " + str(len(scafs.lreads)))
 
@@ -284,6 +285,8 @@ for iteration in range(10):
     for lrn in list(scafs.lreads.keys()):
         if not scafs.lreads[lrn]["length"]:
             scafs.delete(lrn)
+                
+        
 
 lrsvg = LongReadSVG(args.SVG, zoom=200)
 img = lrsvg.dwg
@@ -295,119 +298,3 @@ if args.final_lrs:
         pickle.dump(scafs, f, pickle.HIGHEST_PROTOCOL)
 
 sys.exit()
-
-
-def is_rightmost(ctg):
-    try:
-        assert(len(contig2scaffold[ctg]) == 1)
-    except AssertionError:
-        print("Other than one scaffold for contig " + ctg1 + " | number of contigs: " + str(len(contig2scaffold[ctg])))
-    scaf = scaffolds[contig2scaffold[ctg][0]]
-    if ctg == scaf.get_rightmost_contig():
-        return True
-    return False
-
-def is_leftmost(ctg):
-    try:
-        assert(len(contig2scaffold[ctg]) == 1)
-    except AssertionError:
-        print("Other than one scaffold for contig " + ctg1 + " | number of contigs: " + str(len(contig2scaffold[ctg])))
-    #try:
-    #print(contig2scaffold[ctg])
-    scaf = scaffolds[contig2scaffold[ctg][0]]
-    #except KeyError:
-    #    print("Problem during is_leftmost. For contig: " + ctg)
-    #    sys.exit(1)
-    if ctg == scaf.get_leftmost_contig():
-        return True
-    return False
-
-#sys.exit()
-
-if args.summaryfile:
-    print("adding short reads ....")
-    change = True
-    while change:
-        change = False
-        for scafid in scaffolds.keys():
-            scaffold = scaffolds[scafid]
-            ctg1 = scaffold.get_rightmost_contig()
-            if not ctg1 in srneighs:
-                continue
-            for ctg2n,ctg2d in srneighs[ctg1]["right"]:
-                if ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 and is_leftmost(ctg2n):
-                #if ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
-                    scaf2 = scaffolds[contig2scaffold[ctg2n][0]]
-                    #print("merged away " + str(id(scaf2)))
-                    #print("contig: " + ctg1)
-                    scaf1 = scaffolds[contig2scaffold[ctg1][0]]
-                    if scaf1.name == scaf2.name:
-                        continue
-                    if scaffold.merge_sr(ctg1,ctg2n,scaf1, scaf2, ctg2d,allcontigs, args.mergefile):
-                        del(scaffolds[id(scaf2)])
-                        for ctg in scaf2.contigset:
-                            contig2scaffold[ctg] = [id(scaf1)]
-                            scaf1.contigset.add(ctg)
-                        for ctg in scaf2.contigset_sr:
-                            contig2scaffold[ctg] = [id(scaf1)]
-                            scaf1.contigset_sr.add(ctg)
-        
-                    
-                    change = True
-                    break
-                elif ctg2n in contig2scaffold and len(contig2scaffold[ctg2n]) > 0 :
-                    #print("Probably " + ctg1 + " fits on " + scaf2.name + " left of " + ctg2n)
-                    pass
-                else:
-                    scaffold.add_short_read_contig_right(ctg1,ctg2n,ctg2d, 0, allcontigs, args.mergefile)
-                    contig2scaffold[ctg2n].append(id(scaffold))
-                    if ctg2n not in contigs:
-                        print("Contig " + ctg2n + " is already part of a scaffold. Investigate!")
-                    else:
-                        del(contigs[ctg2n])
-                    change = True
-            if change:
-                break
-
-print("Nr. of scaffolds: " + str(len(scaffolds) + len(contigs)) + " (" + str(len(scaffolds)) + " cluster + " + str(len(contigs))+ " contigs)")
-        
-if args.contigsmergefile:
-    with open(args.contigsmergefile, "w+") as cmergef:
-        for scid, scaffold in scaffolds.items():
-            sortedcontigs = sorted(scaffold.contigset | scaffold.contigset_sr, key = lambda item: scaffold.left_coords[item])
-            cmergef.write(">" + scaffold.name + "\n")
-            for ctg in scaffold.contigset:
-                if ctg.startswith("chr"):
-                    sortedcontigs.remove(ctg)
-            for ctg1, ctg2 in zip(sortedcontigs[:-1], sortedcontigs[1:]):
-                cmergef.write(ctg1+ "\t" + ctg2 + "\n")
-
-print("Drawing Scaffolds ...")
-            
-# Draw all scaffolds
-lrsr_lengths = []
-lrsr_lengths.append([])
-lrsr_lengths.append([])
-for scaf in scaffolds.values():
-    lrsr_lengths[1].append(scaf.length)
-    lrsr_lengths[0].append(stringify(scaf.length))
-    #lrsr_lengths[0].append("c_" + scaf.name.split("_")[1])
-    yp += scaf.to_SVG(dwg, allcontigs,  xpad, yp, False) + 10
-dwg.save()
-#norm = matplotlib.colors.Normalize(vmin=min(lrsr_lengths[1]), vmax=max(lrsr_lengths[1]))
-#colors = [matplotlib.cm.tab20b(norm(value)) for value in lrsr_lengths[1]]
-#lrsr_lengths.append(colors)
-if args.squareplot:
-    plt.rc('font', size=15)          # controls default text sizes
-    plt.subplot(121)
-    squarify.plot(sizes=lr_lengths[1], label=lr_lengths[0], alpha=.9,color = colors )
-    #squarify.plot(sizes=lr_lengths[1], alpha=.9 )
-    plt.axis('off')
-    plt.title('after long read scaffolding')
-    plt.subplot(122)
-    squarify.plot(sizes=lrsr_lengths[1], label=lrsr_lengths[0], alpha=.9 )
-    #squarify.plot(sizes=lrsr_lengths[1], alpha=.9 )
-    plt.axis('off')
-    plt.title('after long + short read scaffolding')
-    plt.savefig(args.squareplot)
-
