@@ -188,12 +188,13 @@ class Longreads:
 
     def filter_small_double_contigs(self, ctglengths, fraction, verbose=False):
         contigcounts = Counter()
+        self.sort_by_starts()
         for rid,read in self.lreads.items():
             for ctg in read["maps"]:
                 contigcounts[ctg["name"]] += 1
         multis = set([x for x in contigcounts.keys() if contigcounts[x] > 1])
         for rid,read in self.lreads.items():
-            for ctg in read["maps"]:
+            for ctg in read["maps"][1:-1]: # first and last contig of each read get a pass
                 if ctg["name"] in multis:
                     if (ctg["ecc"] - ctg["scc"])/ctglengths[ctg["name"]] < fraction:
                         self.remove_contig_from_read(rid, ctg)
