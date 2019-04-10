@@ -21,7 +21,7 @@ def sniff_format(fileh):
         return "erate"
         
 
-class Longreads:
+class Longreads(object):
     lreads = {}
     cellline = ""
     ctg2lreads = defaultdict(set)
@@ -346,11 +346,11 @@ class Longreads:
                 for ctg1, ctg2 in product(ctgs1, ctgs2):
                     d1 = ctg1["scr"] - ctg1["scc"]
                     d2 = ctg2["scr"] - ctg2["scc"]
-                    poffs.append(d2 - d1)
+                    poffs.append((d1,d2))
             roffs = []
             for off in poffs:
                 for coff in roffs:
-                    if abs(off - coff) < 100:
+                    if abs( (off[1]-off[0]) - (coff[1]-coff[0]) ) < 100:
                         break
                 else:
                     roffs.append(off)
@@ -474,8 +474,8 @@ class Longreads:
                     continue
                 offs = self.get_possible_offsets(lr1,lr2)
                 scores = []
-                for offset in offs:
-                    scores.append(self.pseudoalign(lr1,lr2, offset))
+                for d1, d2 in offs:
+                    scores.append(self.pseudoalign(lr1,lr2, d2-d1))
                 if scores:
                     if debug:
                         print("-"*40)
@@ -484,8 +484,8 @@ class Longreads:
                         print(scores)
                     if max(scores) > 0:
                         sidx = scores.index(max(scores))
-                        dists[lr1][lr2] = -offs[sidx] # save offset in table, score doesn't matter 
-                        dists[lr2][lr1] = offs[sidx] # save offset in table, score doesn't matter 
+                        dists[lr1][lr2] = offs[sidx][0]-offs[sidx][1] # save offset in table, score doesn't matter 
+                        dists[lr2][lr1] = offs[sidx][1]-offs[sidx][0] # save offset in table, score doesn't matter 
                     elif max(scores) == 0:
                         dists[lr1][lr2] = None # distance can't be determined, but no contradiction
                         dists[lr2][lr1] = None # distance can't be determined, but no contradiction
@@ -561,7 +561,7 @@ class Longreads:
                     contig["strand"] = 0 if contig["strand"] == 1 else 1
                 
 
-class Scaffold:
+class Scaffold(object):
     cluster_counter = 0
     linename = None
     in_mergefile = False
@@ -1514,7 +1514,7 @@ class Scaffold:
         return newinst
     #add_seq_info(self):
 
-class Scaffold2:
+class Scaffold2(object):
     lrids = deque()
 
     # poor man's kmeans clustering
@@ -1701,7 +1701,7 @@ class Scaffold2:
         return ypos+7
 
 
-class LongReadSVG:
+class LongReadSVG(object):
 
     def __init__(self, filehandle, zoom=100,shortread_info=False):
         self.zoom = zoom
