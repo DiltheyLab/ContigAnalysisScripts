@@ -130,7 +130,7 @@ print("Nr. of Contigs: " + str(len(contigs)))
 
 
 
-def cluster(scores, dists, verbose= False):
+def cluster(scores, dists,scafs, verbose= False):
     # greedyly expand components with best matching thing
     gr = nx.DiGraph()
     if verbose:
@@ -176,6 +176,23 @@ def cluster(scores, dists, verbose= False):
                     worklist.append(n)
         # now get all distances from the leftmost node
         minnode = min(gr[anchor], key = lambda x: gr[anchor][x]["dist"])
+        maxnode = max(gr[anchor], key = lambda x: gr[anchor][x]["dist"]+scafs.lreads[x]["length"])
+        print(minnode)
+        print(maxnode)
+
+        # let's jump from read to read 
+        #reachable_nodes = gr[minnode]
+        #while maxnode not in reachable_nodes:
+        #mi
+        # 
+        
+        offsets = scafs.get_possible_offsets(minnode,maxnode)
+        pairscores = []
+        for offset in offsets:
+            pairscores.append(scafs.pseudoalign(minnode,maxnode,offset[1]-offset[0]))
+        if offsets:
+            print(max(pairscores))
+
         for node in set(component):
             gr.add_edge(minnode, node, dist = gr[minnode][anchor]["dist"] + gr[anchor][node]["dist"])
             gr.add_edge(node, minnode, dist = -gr[minnode][anchor]["dist"] - gr[anchor][node]["dist"])
@@ -265,7 +282,7 @@ for iteration in range(10):
     lr_scores, lr_dists = scafs.pseudoalign_all()
     print("finished.")
     print("Clustering... ", end="")
-    creads, gr = cluster(lr_scores, lr_dists)
+    creads, gr = cluster(lr_scores, lr_dists, scafs)
     if len(scafs.lreads) == len(creads):
         status += 1
     print("finished.")

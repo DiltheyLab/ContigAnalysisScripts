@@ -334,7 +334,9 @@ class Longreads(object):
         #print("overall_score: " + str(overall_score))
         return overall_score
 
-    def get_possible_offsets(self, lr1, lr2):
+    def get_possible_offsets(self, lr1, lr2, min1=0):
+        ' gets all possible offsets for two specific reads given its contig signatures
+        min1 can be set to exclude all contigs with coordinates lower than that value'
         samectgs = self.lreads[lr1]["ctgset"] & self.lreads[lr2]["ctgset"]
         poffs = []
         if not samectgs:
@@ -345,6 +347,8 @@ class Longreads(object):
                 ctgs2 = self.lreads[lr2]["mapsc"][ctgn]
                 for ctg1, ctg2 in product(ctgs1, ctgs2):
                     d1 = ctg1["scr"] - ctg1["scc"]
+                    if d1 < min1:
+                        continue
                     d2 = ctg2["scr"] - ctg2["scc"]
                     poffs.append((d1,d2))
             roffs = []
