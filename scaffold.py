@@ -20,6 +20,12 @@ def sniff_format(fileh):
     except:
         return "erate"
         
+complement = {"A":"T", "T":"A", "G":"C", "C":"G"}
+def revcomp(instring):
+    outstring = ""
+    for char in instring:
+        outstring += complement[char]
+    return outstring[::-1]
 
 class Longreads(object):
     lreads = {}
@@ -335,8 +341,9 @@ class Longreads(object):
         return overall_score
 
     def get_possible_offsets(self, lr1, lr2, min1=0):
-        ' gets all possible offsets for two specific reads given its contig signatures
-        min1 can be set to exclude all contigs with coordinates lower than that value'
+        """ Gets all possible offsets for two specific reads given its contig signatures
+        min1 can be set to exclude all contigs with coordinates lower than that value
+        """
         samectgs = self.lreads[lr1]["ctgset"] & self.lreads[lr2]["ctgset"]
         poffs = []
         if not samectgs:
@@ -558,11 +565,13 @@ class Longreads(object):
                     fcount += (contig["strand"]*(-2) + 1) # -1 if forward, +1 if revcomp
             if fcount < 0:
                 length = self.lreads[rid]["length"]
+                self.lreads[rid]["reverse"] = True
                 for contig in self.lreads[rid]["maps"]:
                     tmp = contig["scr"]
                     contig["scr"] = length - contig["ecr"] 
                     contig["ecr"] = length - tmp
                     contig["strand"] = 0 if contig["strand"] == 1 else 1
+                
                 
 
 class Scaffold(object):
