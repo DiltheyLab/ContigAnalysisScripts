@@ -26,12 +26,10 @@ contig  2215APD 1.0 # unnecessary
 contig  108APD 1.0 # unnecessary
 contig  2374APD 1.0 # unnecessary
 44dd82a6-7ebf-4557-aa23-0b518b0c428a    2324APD # doubling
-contig  1379APD 1.0 # small and double
 contig  744APD 1.0 # small and double
 contig  221APD 1.0 # small and double
 contig  53APD 1.0 # small and double
 c9f07b9d-e667-45dc-9b59-8e2d7ec71cb7    all # causes problems
-6d464979-3d51-4ae2-97c1-0df2fb93f915    2443APD # doubles 2443APD
 7ad99c6d-282a-43bb-a4ea-57de5131dee3    all # hairpin
 3903ebc9-bb41-4634-96a7-c568638e4bac    all # bad read
 ea1fd13e-4bd5-4557-9c6b-79b7e00f4006    all # bad read
@@ -41,3 +39,11 @@ a3f07f2a-5794-487f-a536-55cfb27e0fe7    all # bad read
 5c20143a-4f09-4127-84d2-d9a6462a3531    all # bad read
 contig  1783APD 1.0 # problem at C4A
 contig  2394APD 1.0 # problem at C4A
+e1257930-8cd6-414b-ba88-5254ab298d40    116APD # doesn't fit well
+e1257930-8cd6-414b-ba88-5254ab298d40    1160APD # doesn't fit well
+e1257930-8cd6-414b-ba88-5254ab298d40    432APD # doesn't fit well
+8a929256-fa58-4e22-88cb-b9870254200f    342APD # doesn't fit well
+44e5f841-85a7-4d4c-94aa-7a4e355f6a16    744APD # seems wrong
+18197822-30e6-45e0-8ef7-0a8254d21c77    401APD # seems wrong
+6d464979-3d51-4ae2-97c1-0df2fb93f915    2443APD # seems wrong doubles 2443
+6d464979-3d51-4ae2-97c1-0df2fb93f915    388APD # seems wrong 
