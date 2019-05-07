@@ -15,6 +15,7 @@ parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format"
 parser.add_argument("sequencefile", help="Input File in FASTQ format")
 parser.add_argument("contigstringfile", help="Input File containing subsequent longread ids")
 parser.add_argument("contigfile", help="Contig File in FASTA format")
+parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
 parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("outfile", help="Sequence Output File")
 args = parser.parse_args()
@@ -23,16 +24,26 @@ contigs = {}
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = str(read.seq)
 
+blacklist = defaultdict(list)
+if args.blacklistfile:
+    with open(args.blacklistfile) as f:
+        for line in f:
+            sline = line.split()
+            if sline[0] == "contig":
+                blacklist[sline[1]] = float(sline[2])
+            else:
+                blacklist[sline[0]].append(sline[1])
+
 lreadseqs = {}
 for read in SeqIO.parse(args.sequencefile, "fastq"):
     lreadseqs[read.id] = str(read.seq)
 
 print("Nr. of Contigs: " + str(len(contigs)))
 
-scafs = Longreads(args.inputfiles, None, args.linename)
+scafs = Longreads(args.inputfiles, blacklist, args.linename)
 #scafs.filter_small_contigs(300)
 #scafs.filter_reverse_small_contigs(600)
-scafs.filter_low_quality_contigs(0.81)
+scafs.filter_low_quality_contigs(0.76)
 scafs.turn_longreads_around()
 scafs.sort_by_starts()
 
@@ -101,14 +112,31 @@ firstcontig = "2345APD"
 
 out_sequence = contigs[firstcontig]
 last_ctgn = firstcontig
+
+# check that important contigs weren't filtered out
+for item1, item2 in zip(items[:-1], items[1:]):
+    if len(item2) == 1:
+        continue
+    ctg1n = item1[0] if len(item1) == 1 else item1[1]
+    lrid2, ctg2n = item2
+    for ctgn in [ctg1n,ctg2n]:
+        if ctgn not in scafs.lreads[lrid2]["ctgset"]:
+            print("Problem found.")
+            print(ctgn + " not in " + lrid2)
+            sys.exit()
+
 print("Getting sequence ...")
 
 for item in items:
     #print("length of sequence: " + str(len(out_sequence)))
     #print(item)
     if len(item) == 2:
+        if last_ctgn == "1471APD":
+            print(item)
         first_ctgn = last_ctgn
         lrid, last_ctgn = item
+        if last_ctgn == "1391APD":
+            print(item)
         if "reverse" in scafs.lreads[lrid]:
             #print(lrid + " is reverse complimentary")
             lr_seq = revcomp(lreadseqs[lrid])
@@ -116,6 +144,8 @@ for item in items:
             lr_seq = lreadseqs[lrid]
         status = 0
         for ctg in scafs.lreads[lrid]["maps"]: # they should be ordered
+            if last_ctgn == "1391APD":
+                print(ctg)
             #print("ctgn: " + ctg["name"])
             if ctg["strand"] == 1: # no reverse contigs allowed
                 continue
@@ -127,16 +157,16 @@ for item in items:
                 else:
                     continue
             elif status == 1:
-                tocut = len(contigs[last_used_ctg["name"]]) - last_used_ctg["ecc"]
+                tocut = len(contigs[last_used_ctg["name"]]) - (last_used_ctg["ecc"]+1) # ecc and scc are zero based
                 #print("to cut: " +str(tocut) + " " + last_used_ctg["name"])
                 if tocut > 0:
                     out_sequence = out_sequence[:-tocut]
                 if last_used_ctg["ecr"] > ctg["scr"]:
                     out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]]
-                    out_sequence += contigs[ctg["name"]][ctg["scc"]-1:]
+                    out_sequence += contigs[ctg["name"]][ctg["scc"]:]
                 else:
-                    out_sequence += lr_seq[last_used_ctg["ecr"]-1:ctg["scr"]-1]
-                    out_sequence += contigs[ctg["name"]][ctg["scc"]-1:]
+                    out_sequence += lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]
+                    out_sequence += contigs[ctg["name"]][ctg["scc"]:]
                 if ctg["name"] == last_ctgn:
                     break
                 last_used_ctg = ctg
