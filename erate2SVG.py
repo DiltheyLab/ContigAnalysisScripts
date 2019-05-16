@@ -56,15 +56,15 @@ for read in SeqIO.parse(args.contigfile, "fasta"):
 scafs = Longreads(args.inputfiles, blacklist, args.linename, whitelist_lreads)
 if whitelist_ctgs:
     scafs.filter_whitelist_ctgs(whitelist_ctgs)
-scafs.filter_contigcounts(args.mincontigs)
+scafs.filter_contigcounts(int(args.mincontigs))
 reverse_mappers = set()
 reverse_mappers.add("344DBB")
 reverse_mappers.add("472DBB")
 scafs.turn_longreads_around(reverse_mappers)
 scafs.sort_by_starts()
-scafs.filter_small_contigs(300)
+#scafs.filter_small_contigs(300)
 #scafs.filter_overlapped_contigs(0.5)
-scafs.filter_contigcounts(args.mincontigs) 
+scafs.filter_contigcounts(int(args.mincontigs))
 
 
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
@@ -230,6 +230,7 @@ for cluster in sorted_clusters:
             xoffset = 0
         ypos += 28
         dwg.add(dwg.text(rid, insert=(xtext, ypad+ypos+1), fill='black', style="font-size:7"))
+        dwg.add(dwg.text(scafs.lreads[rid]["fname"], insert=(xtext, ypad+ypos+5), fill='black', style="font-size:4"))
         g = dwg.defs.add(Group(id=rid))
         g.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+scafs.lreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True

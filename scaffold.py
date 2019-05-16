@@ -104,6 +104,7 @@ class Longreads(object):
                         self.lreads[rid]["mapsc"][ctg].append(data)
                         self.lreads[rid]["rm_ecr"] = int(ecr)
                         self.lreads[rid]["lm_scr"] = int(scr)
+                        self.lreads[rid]["fname"] = inputfilename.split("/")[-1]
 
     @classmethod
     def init_from_dict(cls, lrdict, line, contig_lengths, lrids = None):
