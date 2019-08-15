@@ -4,6 +4,7 @@ from statistics import mean
 import svgwrite
 from svgwrite.container import Group
 import sys
+import re
 
 def shortname(ctgname):
     if "_" in ctgname:
@@ -47,6 +48,11 @@ class Longreads(object):
             for mapper in lread["maps"]:
                 out += "\t" + str(mapper) + "\n"
         return out
+
+    def print_ids(self):
+        for rid in self.lreads.keys():
+            print(rid)
+            #print(lread["name"])
         
     # init just reads in the input file and stores the longreads
     # to get scaffold objects call construct_scaffolds
@@ -105,6 +111,38 @@ class Longreads(object):
                         self.lreads[rid]["rm_ecr"] = int(ecr)
                         self.lreads[rid]["lm_scr"] = int(scr)
                         self.lreads[rid]["fname"] = inputfilename.split("/")[-1]
+
+    @classmethod
+    def init_from_reverse_paf(cls, inputfilename):
+        newinst = cls([],None,"n.a.")
+        with open(inputfilename) as f:
+            for line in f:
+                [ctg, lenc, scc, ecc, strandstring, tmp1, lenr, scr, ecr, nr_matches, block_len, quality] = line.split()[0:12]
+                m = re.search('[A-Z]+', ctg)
+                rid = m.group(0)
+                strand = 0 if strandstring == "+" else 1
+                data = {"name":ctg,"strand":strand,"scr":int(scr),"ecr":int(ecr),"scc":int(scc),"ecc":int(ecc),"lenc":int(lenc), "quality": 1.0}
+                if rid in newinst.lreads:
+                    newinst.lreads[rid]["ctgset"].add(ctg)
+                    newinst.lreads[rid]["mapsc"][ctg].append(data)
+                    newinst.lreads[rid]["maps"].append(data)
+                    if int(ecr) > newinst.lreads[rid]["rm_ecr"]:
+                        newinst.lreads[rid]["rm_ecr"] = int(ecr)
+                    if int(scr) < newinst.lreads[rid]["lm_scr"]:
+                        newinst.lreads[rid]["lm_scr"] = int(scr)
+                else:
+                    newinst.lreads[rid] = {}
+                    newinst.lreads[rid]["ctgset"] = set()
+                    newinst.lreads[rid]["ctgset"].add(ctg)
+                    newinst.lreads[rid]["length"] = int(lenr)
+                    # maps is just a list. mapsc allows for easy access to all contigs with a certain name
+                    newinst.lreads[rid]["maps"] = [data]
+                    newinst.lreads[rid]["mapsc"] = defaultdict(list)
+                    newinst.lreads[rid]["mapsc"][ctg].append(data)
+                    newinst.lreads[rid]["rm_ecr"] = int(ecr)
+                    newinst.lreads[rid]["lm_scr"] = int(scr)
+                    newinst.lreads[rid]["fname"] = inputfilename.split("/")[-1]
+        return newinst
 
     @classmethod
     def init_from_dict(cls, lrdict, line, contig_lengths, lrids = None):
@@ -168,6 +206,30 @@ class Longreads(object):
             for ctg in lread["maps"]:
                 if ctg["quality"] < quality:
                     self.remove_contig_from_read(rid, ctg)
+
+    def get_distance_matrix(self, matrixfilename, srdata = None):
+        with open(matrixfilename, "w+") as out:
+            for rid,read in self.lreads.items():
+                for idx1, ctg1 in enumerate(read["maps"][:-1]):
+                    for ctg2 in read["maps"][idx1+1:]:
+                        dist = ctg2["scr"]-ctg2["scc"] - (ctg1["ecr"] + ctg1["lenc"] - ctg1["ecc"])
+                        out.write("\t".join([ctg1["name"], ctg2["name"], str(dist)])+ "\n" )
+            if srdata:
+                print("kk")
+                for ctgs, dist in srdata.items():
+                    out.write(ctgs[0] + "\t" + ctgs[1] + "\t" + str(dist) + "\n")
+                
+
+    def filter_contigs_by_coverage(self, coverage, ignore_ends=False, verbose=False):
+        for rid, lread in self.lreads.items():
+            for ctg in lread["maps"]:
+                if (ctg == lread["maps"][0] or ctg == lread["maps"][-1]) and ignore_ends:
+                    continue
+                if (ctg["ecc"] - ctg["scc"])/ctg["lenc"] < coverage:
+                    self.remove_contig_from_read(rid, ctg)
+                    if verbose:
+                        print("Removed " + str(ctg["name"]) + " from " + str(rid))
+
 
     # assume contigs are sorted
     def filter_overlapped_contigs(self, verbose=False):
@@ -556,7 +618,7 @@ class Longreads(object):
         for rid in self.lreads:
             self.lreads[rid]["maps"] = sorted(self.lreads[rid]["maps"], key = lambda x: x["scr"])
 
-    def turn_longreads_around(self, revs=[]):
+    def turn_longreads_around(self, revs=[], logging=False):
         for rid in self.lreads:
             fcount = 0
             for contig in self.lreads[rid]["maps"]:
@@ -565,6 +627,8 @@ class Longreads(object):
                 else:
                     fcount += (contig["strand"]*(-2) + 1) # -1 if forward, +1 if revcomp
             if fcount < 0:
+                if logging:
+                    logging.write("Turning around: " + rid + "\n")
                 length = self.lreads[rid]["length"]
                 self.lreads[rid]["reverse"] = True
                 for contig in self.lreads[rid]["maps"]:
