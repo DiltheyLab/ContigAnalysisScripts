@@ -65,6 +65,8 @@ scafs.sort_by_starts()
 #scafs.filter_small_contigs(300)
 #scafs.filter_overlapped_contigs(0.5)
 scafs.filter_contigcounts(int(args.mincontigs))
+scafs.print_ids()
+
 
 
 print("Reads meeting criteria: " + str(len(scafs.lreads)))
@@ -203,8 +205,8 @@ for item in creads:
 
 # draw interesting reads
 ypos = 0
-xtext = 10
-xpad = 200
+xtext = -210
+xpad = 20
 ypad = 10
 
 image = LongReadSVG(args.output, zoom=100)
@@ -235,6 +237,15 @@ for cluster in sorted_clusters:
         g.add(dwg.line((xpad+ xoffset/100, ypad+ypos), ( xpad + (xoffset+scafs.lreads[rid]["length"])/100, ypad+ypos), stroke=svgwrite.rgb(0, 0, 0, '%')))
         above = True
         col = "black"
+        double_contigs = set()
+        seen_contigs = set()
+        for ctg in scafs.lreads[rid]["maps"]:
+            ctgn = ctg["name"].rstrip("rc")
+            if ctgn in seen_contigs:
+                double_contigs.add(ctgn)
+            else:
+                seen_contigs.add(ctgn)
+        
         for ctg in scafs.lreads[rid]["maps"]:
             sc = ctg["scr"]
             ec = ctg["ecr"]
@@ -292,12 +303,11 @@ for cluster in sorted_clusters:
             #g.add(svgwrite.shapes.Rect((xpad+((xoffset+sc)/100),ypad+ypos-6), ((ec-sc)/100,12), stroke='black', stroke_width=1, fill='url(#'+str(gradient_idc)+')', mask='url(#mask1)'))
             if above:
                 yt = ypad+ypos-8
-                if col == "blue":
-                    col = "black"
-                else: 
-                    col = "blue"
+                col = "blue" if col == "black" else "black"
             else:
                 yt = ypad+ypos+13
+            if ctgn in double_contigs:
+                col = "red"
             above = not above
             #g.add(dwg.text(ctg, insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:6"))
             g.add(dwg.text("s"+ctgn+"$", insert=(xpad+(xoffset+sc)/100,yt),fill=col, style="font-size:4"))
