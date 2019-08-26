@@ -8,7 +8,8 @@ from scaffold import Longreads, LongReadSVG, revcomp
 
 parser = ArgumentParser()
 parser.add_argument("inputfiles", help="Input Files in Error-Rate or PAF format", nargs="+")
-parser.add_argument("sequencefile", help="Input File in BAM format")
+parser.add_argument("sequencefile", help="Input File in BAM/CRAM format")
+parser.add_argument("--referencefile", help="Reference File in FASTA format")
 parser.add_argument("contigstringfile", help="Input File containing subsequent longread ids")
 parser.add_argument("contigfile", help="Contig File in FASTA format")
 parser.add_argument("--blacklistfile", help="File containing long read ids where certain contig mappings should be ignored.")
@@ -59,26 +60,63 @@ def get_query_pos(record, ref_position):
             print("operation not implemented: " + op)
             sys.exit()
     return qpos
+
+def get_reference_position(record, q_goal):
+    rpos = record.reference_start
+    qpos = 0
+    for opt in record.cigartuples:
+        #print("rpos: " + str(rpos))
+        op, times = opt
+        #print(opt)
+        if op in [pysam.CINS, pysam.CSOFT_CLIP]: # consumes query
+            if qpos + times > q_goal:
+                return rpos
+            else:
+                qpos += times
+        elif op == pysam.CHARD_CLIP:
+            if qpos + times > q_goal:
+                return rpos
+            else:
+                qpos += times
+        elif op == pysam.CDEL: # consumes reference
+            rpos += times
+        elif op == pysam.CMATCH:
+            if qpos + times > q_goal:
+                rpos += q_goal - qpos
+                return rpos
+            else:
+                rpos += times
+                qpos += times
+        else: 
+            print("operation not implemented: " + op)
+            sys.exit()
+    return rpos
     
 
 # Get Bamfile
-bamfile = pysam.AlignmentFile(args.sequencefile,"rb")
-#rstart = 125 
-#rstop = 145 
-iters = bamfile.fetch("MHC_APD_v1c",rstart,rstop)
-for rec in iters:
-    print(str(rec).split()[0:5])
-    qstart = get_query_pos(rec, rstart)
-    qstop = get_query_pos(rec, rstop)
-    print("qstart:qstop [" + str(qstart) + ":" + str(qstop) + "]")
-    if rec.query_sequence:
-        print(rec.query_sequence[qstart:qstop])
-    #print("rpos: " + str(rpos) + " qpos: " + str(qpos))
+bamfile = pysam.AlignmentFile(args.sequencefile,"rc",reference_filename=args.referencefile)
+
+def get_sequences(bamhandle, rstart, rstop):
+    iters = bamhandle.fetch("MHC_APD_v1c",rstart,rstop)
+    seqs = {}
+    for rec in iters:
+        print(str(rec).split()[0:5])
+        qstart = max(get_query_pos(rec, rstart) , 0)
+        qstop = get_query_pos(rec, rstop)
+        print("qstart:qstop [" + str(qstart) + ":" + str(qstop) + "]")
+        if rec.query_sequence != "" and rec.query_sequence != " ":
+            #print(str(rec.query_name) + ": " + str(rec.query_sequence[qstart:qstop]))
+            seqs[rec.query_name] = str(rec.query_sequence[qstart:qstop])
+        else:
+            print("No sequence for: " + rec.query_name)
+        #print("rpos: " + str(rpos) + " qpos: " + str(qpos))
+    return(seqs)
          
 #sys.exit()
     
 
 # Logfile
+loghandle = None
 if args.logfile:
     loghandle = open(args.logfile,"w+")
 
@@ -93,6 +131,7 @@ scafs.filter_contigs_by_coverage(0.5,ignore_ends=True, verbose = False)
 print("Nr. of reads: " + str(len(scafs.lreads)))
 
 # Parse Recipe File
+needed_reads = set()
 items = []
 with open(args.contigstringfile) as f:
     for line in f:
@@ -101,14 +140,15 @@ with open(args.contigstringfile) as f:
         if len(line.split()) == 2:
         
             lrid, contig = line.split()
+            needed_reads.add(lrid)
             if lrid not in scafs.lreads:
                 print("Error while reading " + args.contigstringfile)
                 print("Did not load " + str(lrid) + " from the input files")
                 sys.exit()
-            if lrid not in lreadseqs:
-                print("Error while reading " + args.contigstringfile)
-                print("Did not load sequence for " + str(lrid))
-                sys.exit()
+            #if lrid not in lreadseqs:
+            #    print("Error while reading " + args.contigstringfile)
+            #    print("Did not load sequence for " + str(lrid))
+            #    sys.exit()
             #ctgn = contig + args.linename
             ctgn = contig
             if ctgn not in contigs:
@@ -130,12 +170,6 @@ with open(args.contigstringfile) as f:
             print("The following line does not have the appopriate format")
             print(line)
 
-# Check that fastq is present
-for item in items:
-    if len(item) == 2:
-        if item[0] not in lreadseqs:
-            print(str(item[0]) +" not found in sequence file. Aborting !")
-            sys.exit()
 
 # some curated distances
 distances = {}
@@ -168,6 +202,14 @@ for item1, item2 in zip(items[:-1], items[1:]):
             print(ctgn + " not in " + lrid2)
             sys.exit()
 
+
+# Get important reads in the bam file
+needed_reads_bams = {}
+for record in bamfile.fetch():
+    if record.query_name in needed_reads:
+        needed_reads_bams[record.query_name] = record
+    
+
 print("Getting sequence ...")
 
 longN = "N"*2000000
@@ -176,11 +218,11 @@ for item in items:
     if len(item) == 2:
         first_ctgn = last_ctgn
         lrid, last_ctgn = item
-        if "reverse" in scafs.lreads[lrid]:
+        #if "reverse" in scafs.lreads[lrid]:
             #print(lrid + " is reverse complimentary")
-            lr_seq = revcomp(lreadseqs[lrid])
-        else:
-            lr_seq = lreadseqs[lrid]
+        #    lr_seq = revcomp(lreadseqs[lrid])
+        #else:
+        #    lr_seq = lreadseqs[lrid]
         
         status = 0
         for ctg in scafs.lreads[lrid]["maps"]: # they should be ordered
@@ -199,10 +241,31 @@ for item in items:
                 #print("to cut: " +str(tocut) + " " + last_used_ctg["name"])
                 #if tocut > 0:
                 #    out_sequence = out_sequence[:-tocut]
-                if last_used_ctg["ecr"] > ctg["scr"]:
+                if last_used_ctg["ecr"] >= ctg["scr"]:
                     out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]]
                 else:
-                    out_sequence += lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]
+                    #out_sequence += lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]
+                    startc = last_used_ctg["ecr"]
+                    endc = ctg["scr"]
+                    rec = needed_reads_bams[lrid]
+                    refs = get_reference_position(rec, last_used_ctg["ecr"])
+                    refe = get_reference_position(rec, ctg["scr"])
+                    print("Getting sequence between " + str(refs) + "-" + str(refe))
+                    
+                    seqs = get_sequences(bamfile, refs, refe)
+                    #print(seqs)
+                    print(last_used_ctg["name"])
+                    print(ctg["name"])
+
+                    with open("SeqsForMSA.fa", "w") as out:
+                        for name, seq in seqs.items():
+                            out.write(">" + name + "\n")
+                            out.write(seq + "\n")
+
+                    sys.exit()
+
+
+
                 out_sequence += contigs[ctg["name"]][ctg["scc"]:ctg["ecc"]]
                 if ctg["name"] == last_ctgn:
                     break
