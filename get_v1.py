@@ -44,6 +44,7 @@ if not args.dryrun:
     for read in SeqIO.parse(args.sequencefile, "fastq"):
         lreadseqs[read.id] = str(read.seq)
 
+loghandle = None
 if args.logfile:
     loghandle = open(args.logfile,"w+")
 
@@ -53,9 +54,9 @@ scafs = Longreads(args.inputfiles, blacklist, args.linename)
 #scafs.filter_small_contigs(300)
 #scafs.filter_reverse_small_contigs(600)
 scafs.filter_low_quality_contigs(0.76)
-print(scafs.lreads["88e9f524-98be-4630-98bd-06054fd07355"]["maps"][10])
+#print(scafs.lreads["88e9f524-98be-4630-98bd-06054fd07355"]["maps"][10])
 scafs.turn_longreads_around(logging=loghandle)
-print(scafs.lreads["88e9f524-98be-4630-98bd-06054fd07355"]["maps"][10])
+#print(scafs.lreads["88e9f524-98be-4630-98bd-06054fd07355"]["maps"][10])
 #print(scafs.lreads["88e9f524-98be-4630-98bd-06054fd07355"])
 scafs.sort_by_starts()
 scafs.filter_contigs_by_coverage(0.5,ignore_ends=True, verbose = False)
@@ -195,8 +196,8 @@ for item in items:
                 if last_used_ctg["ecr"] > ctg["scr"]:
                     out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]]
                 else:
-                    out_sequence += lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]
-                out_sequence += contigs[ctg["name"]][ctg["scc"]:ctg["ecc"]]
+                    out_sequence += (lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]).lower()
+                out_sequence += (contigs[ctg["name"]][ctg["scc"]:ctg["ecc"]]).upper()
                 if ctg["name"] == last_ctgn:
                     break
                 last_used_ctg = ctg
@@ -210,7 +211,7 @@ for item in items:
                 sys.exit()
             else:
                 out_sequence = out_sequence[:distances[(last_ctgn, item[0])]]
-                out_sequence += contigs[item[0]]
+                out_sequence += (contigs[item[0]]).upper()
                 last_ctgn = item[0]
 
 if args.logfile:
