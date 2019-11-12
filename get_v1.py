@@ -163,7 +163,7 @@ longN = "N"*2000000
 
 for item in items:
     #print("length of sequence: " + str(len(out_sequence)))
-    #print(item)
+    #print(item[0])
     if len(item) == 2:
         first_ctgn = last_ctgn
         lrid, last_ctgn = item
@@ -183,6 +183,8 @@ for item in items:
                 continue
             if status == 0:
                 if ctg["name"] == first_ctgn:
+                    if ctg["ecc"] < len(contigs[ctg["name"]]):
+                        out_sequence = out_sequence[:ctg["ecc"]-len(contigs[ctg["name"]])]
                     status = 1
                     last_used_ctg = ctg.copy()
                     # get things
@@ -197,14 +199,17 @@ for item in items:
                     out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]]
                 else:
                     out_sequence += (lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]).lower()
-                out_sequence += (contigs[ctg["name"]][ctg["scc"]:ctg["ecc"]]).upper()
                 if ctg["name"] == last_ctgn:
+                    out_sequence += contigs[ctg["name"]].upper()
                     break
+                else:
+                    out_sequence += (contigs[ctg["name"]][ctg["scc"]:ctg["ecc"]]).upper()
                 last_used_ctg = ctg
     elif len(item) == 1:
         if last_ctgn == item[0]:
             continue
         else:
+            #print("Th")
         # get distance between last_ctg and item[0]
             if (last_ctgn,item[0]) not in distances:
                 print("get distance between " + last_ctgn + " and " + item[0])
