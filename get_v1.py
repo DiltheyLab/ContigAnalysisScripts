@@ -164,8 +164,6 @@ longN = "N"*2000000
 def frowny_case(instring):
     return instring[0].lower() + instring[1:-1].upper() + instring[-1].lower()
 
-#print("frowny case ABCDEF: " + frowny_case("ABCDEF"))
-#print("frowny case abcdef: " + frowny_case("abcdef"))
 
 for item in items:
     #print("length of sequence: " + str(len(out_sequence)))
@@ -191,7 +189,7 @@ for item in items:
                 if ctg["name"] == first_ctgn:
                     if ctg["ecc"] < len(contigs[ctg["name"]]):
                         out_tmp = out_sequence[:ctg["ecc"]-len(contigs[ctg["name"]])]
-                        out_sequence = out_sequence[0:-1] + out_sequence[-1].upper()
+                        out_sequence = out_tmp[0:-1] + out_tmp[-1].lower()
                     status = 1
                     last_used_ctg = ctg.copy()
                     # get things
