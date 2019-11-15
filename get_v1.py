@@ -200,10 +200,10 @@ for item in items:
                 #print("to cut: " +str(tocut) + " " + last_used_ctg["name"])
                 #if tocut > 0:
                 #    out_sequence = out_sequence[:-tocut]
-                if last_used_ctg["ecr"] > ctg["scr"]:
-                    out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]]
+                if last_used_ctg["ecr"]-1 > ctg["scr"]:
+                    out_sequence = out_sequence[:ctg["scr"]-last_used_ctg["ecr"]-1]
                 else:
-                    out_sequence += (lr_seq[last_used_ctg["ecr"]+1:ctg["scr"]]).lower()
+                    out_sequence += (lr_seq[last_used_ctg["ecr"]-1:ctg["scr"]]).lower()
                 if ctg["name"] == last_ctgn:
                     out_sequence += frowny_case(contigs[ctg["name"]])
                     break
