@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 parser.add_argument("inputfile", help="FASTA/PAF input file")
 parser.add_argument("output", help="SVG output file")
+parser.add_argument("--switch_colors", action="store_true", default=False)
 args = parser.parse_args()
 
 altnames = {"chr6_GL000250v2_alt": "APD",
@@ -68,13 +69,16 @@ last_ecr = 0
 if format == "fasta":
     for id, seq in seqs.items():
         totalNs = 0
-        dwg.add(dwg.text(altnames[id], insert=(xpad - 500, ypad+ypos+1), fill='black', style="font-size:40"))
+        if id in altnames:
+            dwg.add(dwg.text(altnames[id], insert=(xpad - 500, ypad+ypos+1), fill='black', style="font-size:40"))
+        else:
+            dwg.add(dwg.text(id, insert=(xpad - 500, ypad+ypos+1), fill='black', style="font-size:40"))
         #dwg.add(dwg.text(scafs.lreads[rid]["fname"], insert=(xtext, ypad+ypos+5), fill='black', style="font-size:4"))
         g = dwg.defs.add(Group(id=id))
         status = "n" if seq[0] == "N" else "s"
         sidx = 0
         idx = 0
-        print("id: " + str(id) + "\t" + str(altnames[id]))
+        #print("id: " + str(id) + "\t" + str(altnames[id]))
         while idx < len(seq):
             if status == "s":
                 while idx < len(seq):
@@ -82,23 +86,21 @@ if format == "fasta":
                         idx += 1
                         continue
                     else:
-                        g.add(svgwrite.shapes.Rect((xpad+((xoffset+sidx)/image.zoom),ypad+ypos-y_halfsize), ((idx-1-sidx)/image.zoom,y_size), stroke='black', stroke_width=1, fill=col))
-                        lcol = col
-                        col = "red"
+                        g.add(svgwrite.shapes.Rect((xpad+((xoffset+sidx)/image.zoom),ypad+ypos-y_halfsize), ((idx-1-sidx)/image.zoom,y_size), stroke='black', stroke_width=0, fill=col))
                         sidx = idx
                         status = "n"
                         idx += 1
                         break
                     if idx == len(seq):
                         break
-            else:
+            elif status == "n":
                 while idx < len(seq):
                     if seq[idx] == "N":
                         idx += 1
                         continue
                     else:
-                        g.add(svgwrite.shapes.Rect((xpad+((xoffset+sidx)/image.zoom),ypad+ypos-y_halfsize), ((idx-1-sidx)/image.zoom,y_size), stroke='black', stroke_width=1, fill=col))
-                        col = col1 if lcol == col2 else col2
+                        g.add(svgwrite.shapes.Rect((xpad+((xoffset+sidx)/image.zoom),ypad+ypos-y_halfsize), ((idx-1-sidx)/image.zoom,y_size), stroke='black', stroke_width=0, fill="red"))
+                        col = col1 if col == col2 else col2
                         totalNs += (idx - sidx)
                         sidx = idx
                         status = "s"
@@ -119,7 +121,7 @@ elif format == "paf":
         g = dwg.defs.add(Group(id=rid))
         #red rectangle background
         lc = lr["maps"][-1]["ecr"]
-        g.add(svgwrite.shapes.Rect((xpad+((xoffset)/image.zoom),ypad+ypos-y_halfsize), ((lc)/image.zoom,y_size), stroke='black', stroke_width=1, fill=coln))
+        g.add(svgwrite.shapes.Rect((xpad+((xoffset)/image.zoom),ypad+ypos-y_halfsize), ((lc)/image.zoom,y_size), stroke='black', stroke_width=0, fill=coln))
         totalNs = 0
         for ctg in lr["maps"]:
             scr = ctg["scr"]
