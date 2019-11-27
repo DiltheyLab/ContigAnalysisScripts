@@ -11,7 +11,7 @@ from operator import itemgetter
 from itertools import combinations, cycle, product
 from collections import defaultdict, deque
 import svgwrite
-from scaffold import Scaffold, Longreads, LongReadSVG
+from scaffold import Longreads, LongReadSVG
 import networkx as nx
 from statistics import mean
 

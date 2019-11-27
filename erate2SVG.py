@@ -7,7 +7,7 @@ from random import sample
 from svgwrite.container import Group
 from Bio import SeqIO
 from collections import defaultdict, deque
-from scaffold import Scaffold, Longreads, LongReadSVG
+from scaffold import Longreads, LongReadSVG
 import networkx as nx
 
 
