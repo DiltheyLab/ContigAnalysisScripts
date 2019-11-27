@@ -22,9 +22,9 @@ parser.add_argument("linename", help="Name of cell line")
 parser.add_argument("outfile", help="Sequence Output File")
 args = parser.parse_args()
 
-seq1="CCCTTTTTGGGAAA"
-print(seq1)
-print(revcomp(seq1))
+#seq1="CCCTTTTTGGGAAA"
+#print(seq1)
+#print(revcomp(seq1))
 contigs = {}
 for read in SeqIO.parse(args.contigfile, "fasta"):
     contigs[read.id] = str(read.seq)
@@ -231,6 +231,6 @@ if args.dryrun:
     print("Lenght of the assembly: " + str(len(out_sequence)))
 else:
     with open(args.outfile, "w") as out:
-        out.write(">MHC_APD\n")
+        out.write(">MHC_"+ args.linename + "\n")
         out.write(out_sequence)
 
