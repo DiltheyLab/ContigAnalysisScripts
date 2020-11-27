@@ -8,6 +8,12 @@ conda create --name contig_analysis --file contig_analysis_env.yml
 conda activate contig_analysis
 ```
 The scripts do not require many libraries. The main one being biopython, so manual installation with pip should not be too complicated.
+When you have all the dependencies, you should be able to simply clone this repository and run the scripts as detailed below.
+```bash
+git clone https://github.com/DiltheyLab/ContigAnalysisScripts
+cd ContigAnalysisScripts
+```
+
 ## Data generation
 These scripts require [PAF formatted ](https://github.com/lh3/miniasm/blob/master/PAF.md) input. This is the default output format of minimap2. 
 The scripts' are intended for the purpose of visualizing a region in a larger genome that has been analyzed beforehand, such that a number of high-confidence contigs and a set of Nanopore long reads exist. In the following the high-confidence contiguous sequences will be referred to simply as "contigs" and the file containing them as `contigs.fasta`. The long reads libraries will be referred to as `lr_lib1.fastq`, `lr_lib2.fastq` etc. .
